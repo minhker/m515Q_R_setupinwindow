@@ -199,12 +199,15 @@ obj-$(CONFIG_ADSP_FACTORY)      += adsp_factory/
 obj-$(CONFIG_ESOC)              += esoc/
 # GNSS driver
 obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
+obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_SENSORS_FINGERPRINT)	+= fingerprint/
 
 #obj-$(CONFIG_SEC_DEBUG)		+= debug/
 obj-y				+= samsung/
 ifeq ($(CONFIG_BATTERY_SAMSUNG_USING_QC), y)
 obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery_qc/
+else ifeq ($(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE), y)
+obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery/
 else
 obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery_v2/
 endif
@@ -223,3 +226,6 @@ obj-$(CONFIG_SEC_SVDM)	+= ccic/
 
 #TZIC
 obj-y  += security/samsung/tzic/
+
+# SPU signature verify
+obj-$(CONFIG_SPU_VERIFY) += spu_verify/

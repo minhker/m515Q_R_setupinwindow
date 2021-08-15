@@ -1393,7 +1393,6 @@ static int dsi_update_mdnie_data(struct samsung_display_driver_data *vdd)
 	mdnie_data->support_cabc = 0;
 	mdnie_data->support_hmt_color_temperature = 1;
 	mdnie_data->support_siliconworks = 0;
-
 	vdd->mdnie.mdnie_data = mdnie_data;
 
 	return 0;

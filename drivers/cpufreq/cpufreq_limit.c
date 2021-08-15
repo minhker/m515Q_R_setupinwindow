@@ -135,7 +135,8 @@ struct cpufreq_limit_hmp {
 };
 
 struct cpufreq_limit_hmp hmp_param = {
-#ifdef CONFIG_ARCH_SEC_SM7150
+/* SM7150 */
+#if defined (CONFIG_ARCH_SEC_SM7150)
 	.little_cpu_start 	= 0,
 	.little_cpu_end		= 5,
 	.big_cpu_start 		= 6,
@@ -148,6 +149,21 @@ struct cpufreq_limit_hmp hmp_param = {
 
 	.little_divider 	= 2,
 	.use_hotplug_out	= false,
+/* SM7125 */
+#elif defined (CONFIG_ARCH_ATOLL)
+	.little_cpu_start 	= 0,
+	.little_cpu_end		= 5,
+	.big_cpu_start 		= 6,
+	.big_cpu_end		= 7,
+	.little_min_freq	= 288000,	/* divided value, not real clock */
+	.little_max_freq	= 902400,	/* divided value, not real clock */
+	.big_min_freq		= 979200,
+	.big_max_freq		= 2323200,
+	.little_min_lock	= 1267200 / 2, /* SVS_L1 */
+
+	.little_divider 	= 2,
+	.use_hotplug_out	= false,
+/* SM6150 */
 #else
 	.little_cpu_start 	= 0,
 	.little_cpu_end		= 5,

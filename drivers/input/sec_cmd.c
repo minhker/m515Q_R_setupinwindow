@@ -15,14 +15,25 @@ struct class *tsp_sec_class;
 
 #if defined USE_SEC_CMD_QUEUE
 static void sec_cmd_store_function(struct sec_cmd_data *data);
+
+void sec_cmd_execution(struct sec_cmd_data *data)
+{
+	mutex_lock(&data->fs_lock);
+
+	/* check lock	*/
+	mutex_lock(&data->cmd_lock);
+	data->cmd_is_running = true;
+	mutex_unlock(&data->cmd_lock);
+
+	data->cmd_state = SEC_CMD_STATUS_RUNNING;
+	sec_cmd_store_function(data);
+
+	mutex_unlock(&data->fs_lock);
+}
 #endif
 
 void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 {
-	mutex_lock(&data->cmd_lock);
-	data->cmd_is_running = false;
-	mutex_unlock(&data->cmd_lock);
-
 #ifdef USE_SEC_CMD_QUEUE
 	mutex_lock(&data->fifo_lock);
 	if (kfifo_len(&data->cmd_queue)) {
@@ -30,17 +41,18 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 			(int)(kfifo_len(&data->cmd_queue) / sizeof(struct command)));
 		mutex_unlock(&data->fifo_lock);
 
-		/* check lock	*/
-		mutex_lock(&data->cmd_lock);
-		data->cmd_is_running = true;
-		mutex_unlock(&data->cmd_lock);
-
-		data->cmd_state = SEC_CMD_STATUS_RUNNING;
 		schedule_work(&data->cmd_work.work);
-
 	} else {
 		mutex_unlock(&data->fifo_lock);
+
+		mutex_lock(&data->cmd_lock);
+		data->cmd_is_running = false;
+		mutex_unlock(&data->cmd_lock);
 	}
+#else
+	mutex_lock(&data->cmd_lock);
+	data->cmd_is_running = false;
+	mutex_unlock(&data->cmd_lock);
 #endif
 }
 
@@ -49,7 +61,7 @@ static void cmd_exit_work(struct work_struct *work)
 {
 	struct sec_cmd_data *data = container_of(work, struct sec_cmd_data, cmd_work.work);
 
-	sec_cmd_store_function(data);
+	sec_cmd_execution(data);
 }
 #endif
 
@@ -324,7 +336,7 @@ static void sec_cmd_store_function(struct sec_cmd_data *data)
 				(unsigned long)t,
 				nanosec_rem / 1000);
 
-		//sec_debug_tsp_command_history(tbuf);
+		sec_debug_tsp_command_history(tbuf);
 	}
 }
 
@@ -371,9 +383,9 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 						nanosec_rem / 1000);
 
 				snprintf(task_info, 40, "\n[%d:%s]", current->pid, current->comm);
-				//sec_debug_tsp_command_history(task_info);
-				//sec_debug_tsp_command_history(cmd.cmd);
-				//sec_debug_tsp_command_history(tbuf);
+				sec_debug_tsp_command_history(task_info);
+				sec_debug_tsp_command_history(cmd.cmd);
+				sec_debug_tsp_command_history(tbuf);
 
 			}
 			break;
@@ -408,16 +420,7 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 	}
 	mutex_unlock(&data->fifo_lock);
 
-	mutex_lock(&data->fs_lock);
-	/* check lock   */
-	mutex_lock(&data->cmd_lock);
-	data->cmd_is_running = true;
-	mutex_unlock(&data->cmd_lock);
-
-	data->cmd_state = SEC_CMD_STATUS_RUNNING;
-	sec_cmd_store_function(data);
-
-	mutex_unlock(&data->fs_lock);
+	sec_cmd_execution(data);
 	return count;
 }
 #endif

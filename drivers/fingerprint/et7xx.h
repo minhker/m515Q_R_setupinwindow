@@ -30,7 +30,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include "../pinctrl/core.h"
-#include <linux/pm_qos.h>
 
 #ifdef ET7XX_SPI_DEBUG
 #define DEBUG_PRINT(fmt, args...) pr_err(fmt, ## args)
@@ -185,7 +184,6 @@ struct etspi_data {
 	unsigned int drdyPin;	/* DRDY GPIO pin number */
 	unsigned int sleepPin;	/* Sleep GPIO pin number */
 	unsigned int ldo_pin;	/* Ldo GPIO pin number */
-	unsigned int min_cpufreq_limit;
 	unsigned int spi_cs;	/* spi cs pin <temporary gpio setting> */
 	const char *rb;
 
@@ -220,8 +218,6 @@ struct etspi_data {
 	struct pinctrl_state *pins_poweron;
 	struct pinctrl_state *pins_poweroff;
 	bool ldo_enabled;
-
-	struct pm_qos_request pm_qos;
 };
 
 int etspi_io_read_cis_register(struct etspi_data *etspi, u8 *addr, u8 *buf);

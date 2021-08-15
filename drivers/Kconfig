@@ -9,6 +9,8 @@ source "drivers/bus/Kconfig"
 
 source "drivers/connector/Kconfig"
 
+source "drivers/gnss/Kconfig"
+
 source "drivers/mtd/Kconfig"
 
 source "drivers/of/Kconfig"
@@ -207,6 +209,8 @@ source "drivers/thunderbolt/Kconfig"
 
 source "drivers/android/Kconfig"
 
+source "drivers/gpu/trace/Kconfig"
+
 source "drivers/nvdimm/Kconfig"
 
 source "drivers/dax/Kconfig"
@@ -231,6 +235,8 @@ source "drivers/esoc/Kconfig"
 
 source "drivers/samsung/Kconfig"
 
+source "drivers/battery/Kconfig"
+
 source "drivers/battery_v2/Kconfig"
 
 source "drivers/battery_qc/Kconfig"
@@ -251,4 +257,7 @@ source "drivers/ccic/Kconfig"
 
 source "drivers/security/samsung/tzic/Kconfig"
 
+source "drivers/spu_verify/Kconfig"
+
+source "drivers/kperfmon/Kconfig"
 endmenu

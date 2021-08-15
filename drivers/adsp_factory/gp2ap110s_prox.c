@@ -245,6 +245,14 @@ static ssize_t prox_cancel_show(struct device *dev,
 			pdata->offset, hi_thd, low_thd);
 }
 
+static ssize_t prox_cancel_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	//for LCiA ADC Check sequence
+	pr_info("[FACTORY] %s\n", __func__);
+	return size;
+}
+
 void prox_factory_init_work(void)
 {
 	pr_info("[FACTORY] %s: Done!\n", __func__);
@@ -671,7 +679,7 @@ static DEVICE_ATTR(name, 0444, prox_name_show, NULL);
 static DEVICE_ATTR(state, 0444, prox_raw_data_show, NULL);
 static DEVICE_ATTR(raw_data, 0444, prox_raw_data_show, NULL);
 static DEVICE_ATTR(prox_avg, 0664, prox_avg_show, prox_avg_store);
-static DEVICE_ATTR(prox_cal, 0444, prox_cancel_show, NULL);
+static DEVICE_ATTR(prox_cal, 0664, prox_cancel_show, prox_cancel_store);
 static DEVICE_ATTR(thresh_high, 0664,
 	prox_thresh_high_show, prox_thresh_high_store);
 static DEVICE_ATTR(thresh_low, 0664,

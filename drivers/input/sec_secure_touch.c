@@ -397,6 +397,7 @@ static int sec_secure_touch_probe(struct platform_device *pdev)
 	data->device = sec_device_create(14, data, SECURE_TOUCH_DEV_NAME);
 	if (IS_ERR(data->device)) {
 		pr_info("%s %s: failed probe: create\n", SECLOG, __func__);
+		kfree(data);
 		return -ENODEV;
 	}
 
@@ -411,6 +412,9 @@ static int sec_secure_touch_probe(struct platform_device *pdev)
 	ret = sysfs_create_group(&data->device->kobj, &sec_secure_touch_attr_group);
 	if (ret < 0) {
 		pr_info("%s %s: failed probe: create sysfs\n", SECLOG, __func__);
+		sec_device_destroy(data->device->devt);
+		g_ss_touch = NULL;
+		kfree(data);
 		return -ENODEV;
 	}
 
@@ -449,6 +453,7 @@ static int sec_secure_touch_remove(struct platform_device *pdev)
 	sec_device_destroy(data->device->devt);
 
 	g_ss_touch = NULL;
+	kfree(data);
 	return 0;
 }
 

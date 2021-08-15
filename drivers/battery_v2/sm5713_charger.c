@@ -15,7 +15,11 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/power_supply.h>
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#else
 #include <linux/muic/muic.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #include "include/sec_battery.h"
 #include "include/sec_charging_common.h"
 #include "include/charger/sm5713_charger.h"

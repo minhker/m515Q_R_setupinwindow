@@ -21,12 +21,18 @@
 #include <linux/of.h>
 #include <linux/spinlock.h>
 #include <linux/wakelock.h>
+#include <linux/sec_class.h> 
 
-#if 0 //defined(CONFIG_SEC_WINNERLTE_PROJECT)
-#define EMULATE_HALL_IC
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+#if defined(CONFIG_SEC_A52Q_PROJECT)
+#define HALL_NUMBER 1
+#else
+#define HALL_NUMBER 2
+#endif
 #endif
 
-extern struct device *sec_key;
+struct device *hall_ic;
+EXPORT_SYMBOL(hall_ic);
 
 struct hall_drvdata {
 	struct input_dev *input;
@@ -57,6 +63,17 @@ static ssize_t hall_detect_show(struct device *dev,
 }
 static DEVICE_ATTR(hall_detect, 0444, hall_detect_show, NULL);
 
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+static ssize_t hall_number_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	sprintf(buf, "%u\n", HALL_NUMBER);
+
+	return strlen(buf);
+}
+static DEVICE_ATTR_RO(hall_number);
+#endif
+
 #ifdef CONFIG_SEC_FACTORY
 static void flip_cover_work(struct work_struct *work)
 {
@@ -64,7 +81,10 @@ static void flip_cover_work(struct work_struct *work)
 	struct hall_drvdata *ddata =
 		container_of(work, struct hall_drvdata,
 				flip_cover_dwork.work);
-
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+	char hall_uevent[20] = {0,};
+	char *hall_status[2] = {hall_uevent, NULL};
+#endif
 	first = !gpio_get_value(ddata->gpio_flip_cover);
 
 	pr_info("keys:%s #1 : %d\n", __func__, first);
@@ -79,6 +99,12 @@ static void flip_cover_work(struct work_struct *work)
 		flip_cover = first;
 		input_report_switch(ddata->input, SW_FLIP, flip_cover);
 		input_sync(ddata->input);
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+		/* send uevent for hall ic */
+		snprintf(hall_uevent, sizeof(hall_uevent), "hall=%s",
+			!flip_cover ? "open" : "close");
+		kobject_uevent_env(&hall_ic->kobj, KOBJ_CHANGE, hall_status);
+#endif
 	}
 }
 #else
@@ -289,11 +315,21 @@ static int hall_probe(struct platform_device *pdev)
 	init_hall_ic_irq(input);
 
 	if (ddata->gpio_flip_cover != 0) {
-		error = device_create_file(sec_key, &dev_attr_hall_detect);
+		hall_ic = sec_device_create(0, ddata, "hall_ic");
+
+		error = device_create_file(hall_ic, &dev_attr_hall_detect);
 		if (error < 0) {
 			pr_err("Failed to create device file(%s)!, error: %d\n",
 			dev_attr_hall_detect.attr.name, error);
 		}
+
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+		error = device_create_file(hall_ic, &dev_attr_hall_number);
+		if (error < 0) {
+			pr_err("Failed to create device file(%s)!, error: %d\n",
+			dev_attr_hall_number.attr.name, error);
+		}
+#endif
 	}
 
 	error = input_register_device(input);

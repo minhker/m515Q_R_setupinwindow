@@ -23,9 +23,18 @@
 #include <linux/mfd/samsung/s2mu106.h>
 
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #endif /* CONFIG_MUIC_NOTIFIER */
+
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+#include <linux/usb/typec/s2mu107/s2mu107_pd.h>
+#endif
 
 #include "../sec_charging_common.h"
 
@@ -361,6 +370,9 @@ typedef struct s2mu106_charger_platform_data {
 	int chg_switching_freq;
 	int slow_charging_current;
 	int wireless_cc_cv;
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	bool block_otg_psk_mode_en;
+#endif
 } s2mu106_charger_platform_data_t;
 
 
@@ -369,6 +381,9 @@ struct s2mu106_charger_data {
 	struct device *dev;
 	struct s2mu106_platform_data *s2mu106_pdata;
 	struct delayed_work otg_vbus_work;
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	struct delayed_work otg_bst_work;
+#endif
 	struct delayed_work ivr_work;
 	struct wake_lock ivr_wake_lock;
 	struct delayed_work wc_current_work;
@@ -389,6 +404,9 @@ struct s2mu106_charger_data {
 	int topoff_current;
 	int cable_type;
 	bool is_charging;
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	bool is_boosting;
+#endif
 	unsigned int charge_mode;
 	struct mutex charger_mutex;
 
@@ -422,7 +440,9 @@ struct s2mu106_charger_data {
 
 	/* efficiency 9V charging */
 	unsigned char reg_0x9E;
-
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	unsigned char reg_0x86;
+#endif
 #if defined(CONFIG_MUIC_NOTIFIER)
 	struct notifier_block cable_check;
 #endif

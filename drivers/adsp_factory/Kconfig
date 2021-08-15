@@ -19,6 +19,15 @@ config LSM6DSM_FACTORY
 	  request selftest to adsp_factory.
 	  receive test result from adsp_factory.
 
+config LSM6DSO_FACTORY
+	tristate "factory test for SSC - LSM6DSO"
+	default n
+	help
+	  lsm6dso factory driver.
+	  provide sysfs for factory test.
+	  request selftest to adsp_factory.
+	  receive test result from adsp_factory.
+
 config ICM42605_FACTORY
 	tristate "factory test for SSC - ICM42605"
 	default n
@@ -42,6 +51,15 @@ config STK33617_FACTORY
 	default n
 	help
 	  STK33617 factory driver.
+	  provide sysfs for factory test.
+	  request selftest to adsp_factory.
+	  receive test result from adsp_factory.
+
+config STK31610_FACTORY
+	tristate "factory test for SSC - STK31610"
+	default n
+	help
+	  STK31610 factory driver.
 	  provide sysfs for factory test.
 	  request selftest to adsp_factory.
 	  receive test result from adsp_factory.
@@ -116,6 +134,15 @@ config STK3031_VCNL36811_DUALIZATION_FACTORY
 	  request selftest to adsp_factory.
 	  receive test result from adsp_factory.
 
+config LPS22HH_FACTORY
+	tristate "factory test for SSC - lps22hh"
+	default n
+	help
+	  lps22hh factory driver.
+	  provide sysfs for factory test.
+	  request selftest to adsp_factory.
+	  receive test result from adsp_factory.
+
 config SUPPORT_SSC_MODE
 	tristate "Support ssc mode function for adsp sensor"
 	default n
@@ -145,3 +172,26 @@ config SUPPORT_PROX_DUALIZATION
 	depends on ADSP_FACTORY
 	help
 	  Support the dualization for prox function.
+
+config NOT_SUPPORT_PROX_FACTORY
+	tristate "Not Support prox sensor as it is supporting PROTOS"
+	default n
+	depends on ADSP_FACTORY
+	help
+	  Not Support prox function.
+
+config SLPI_MOTOR
+	tristate "Sensors support motor"
+	default n
+	help
+	  Support the motor state function
+	  provide sysfs for factory test.
+	  request selftest to adsp_factory.
+	  receive test result from adsp_factory.
+
+config FLIP_COVER_DETECTOR_FACTORY
+	tristate "factory test for SSC - Flip Cover Detector"
+	default n
+	help
+	  flip_cover_detector factory driver.
+	  provide sysfs for cover status by nfc.

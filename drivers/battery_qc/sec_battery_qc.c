@@ -12,6 +12,7 @@
 #include "include/sec_battery_qc.h"
 #include "include/sec_battery_sysfs_qc.h"
 #include "include/sec_battery_dt_qc.h"
+#include "include/sec_battery_ttf.h"
 #include <linux/sec_param.h>
 
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
@@ -19,7 +20,7 @@
 #endif
 
 #if defined(CONFIG_QPNP_SMB5)
-#if defined(CONFIG_SEC_A90Q_PROJECT) || defined(CONFIG_SEC_A70S_PROJECT)
+#if defined(CONFIG_SEC_A90Q_PROJECT) || defined(CONFIG_SEC_A70S_PROJECT) || defined(CONFIG_SEC_A70Q_PROJECT)
 #include "../power/supply/qcom_r1/smb5-lib.h"
 #include "../power/supply/qcom_r1/smb5-reg.h"
 #else
@@ -155,6 +156,7 @@ static int get_cable_type(struct sec_battery_info *battery)
 		return POWER_SUPPLY_TYPE_UNKNOWN;
 	} else { 
 		//pr_info("%s: cable_type(%d)\n", __func__, value.intval);
+		ttf_work_start(battery);
 		return value.intval;
 	}
 }
@@ -906,6 +908,9 @@ static void sec_bat_monitor_work(struct work_struct *work)
 				SEC_BAT_CURRENT_EVENT_HIGH_TEMP_LIMIT);
 		pr_info("%s: high temp limit recovery. batt_temp(%d)\n", __func__, battery->batt_temp);
 	}
+
+	/* time to full check */
+	sec_bat_calc_time_to_full(battery);
 
 #if defined(CONFIG_BATTERY_CISD)
 	sec_bat_cisd_check(battery);
@@ -2219,6 +2224,8 @@ static int sec_battery_probe(struct platform_device *pdev)
 			"%s: Fail to Create Workqueue\n", __func__);
 		goto err_workqueue;
 	}
+
+	ttf_init(battery);
 
 	INIT_DELAYED_WORK(&battery->usb_changed_work, sec_usb_changed_work);
 	INIT_DELAYED_WORK(&battery->bat_changed_work, sec_bat_changed_work);

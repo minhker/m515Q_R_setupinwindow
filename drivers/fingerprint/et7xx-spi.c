@@ -656,36 +656,7 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case FP_CPU_SPEEDUP:
-		pr_info("%s FP_CPU_SPEEDUP\n", __func__);
-		if (ioc->len) {
-			u8 retry_cnt = 0;
-			pr_info("%s FP_CPU_SPEEDUP ON:%d, retry: %d\n",
-					__func__, ioc->len, retry_cnt);
-			if (etspi->min_cpufreq_limit) {
-				pm_qos_add_request(&etspi->pm_qos,
-					PM_QOS_CPU_DMA_LATENCY, 0);
-				do {
-					retval = set_freq_limit(DVFS_FINGER_ID,
-						etspi->min_cpufreq_limit);
-					retry_cnt++;
-					if (retval) {
-						pr_err("%s: booster start failed. (%d) retry: %d\n"
-							, __func__, retval,
-							retry_cnt);
-						usleep_range(500, 510);
-					}
-				} while (retval && retry_cnt < 7);
-			}
-		} else {
-			if (etspi->min_cpufreq_limit) {
-				pr_info("%s FP_CPU_SPEEDUP OFF\n", __func__);
-				retval = set_freq_limit(DVFS_FINGER_ID, -1);
-				if (retval)
-					pr_err("%s: booster stop failed. (%d)\n"
-						, __func__, retval);
-				pm_qos_remove_request(&etspi->pm_qos);
-			}
-		}
+		pr_info("%s FP_CPU_SPEEDUP does not set\n", __func__);
 		break;
 
 	case FP_SET_SENSOR_TYPE:
@@ -994,9 +965,6 @@ static int etspi_parse_dt(struct device *dev, struct etspi_data *data)
 		pr_info("%s: ldo_pin=%d\n",
 			__func__, data->ldo_pin);
 	}
-	if (of_property_read_u32(np, "etspi-min_cpufreq_limit",
-		&data->min_cpufreq_limit))
-		data->min_cpufreq_limit = 0;
 
 	if (of_property_read_string(np, "etspi-regulator", &data->btp_vdd) < 0) {
 		pr_info("not use btp_regulator\n");

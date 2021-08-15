@@ -47,6 +47,9 @@
 #define WC_CURRENT_START	500
 #define IVR_WORK_DELAY 50
 
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+#define OTG_BST_WORK_DELAY 10
+#endif
 static char *s2mu106_supplied_to[] = {
 	"battery",
 };
@@ -78,15 +81,32 @@ static void s2mu106_test_read(struct i2c_client *i2c)
 
 	s2mu106_read_reg(i2c, 0x3A, &data);
 	sprintf(str+strlen(str), "0x3A:0x%02x, ", data);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	s2mu106_read_reg(i2c, 0x82, &data);
+	sprintf(str+strlen(str), "0x82:0x%02x, ", data);
+	s2mu106_read_reg(i2c, 0x83, &data);
+	sprintf(str+strlen(str), "0x83:0x%02x, ", data);
+	s2mu106_read_reg(i2c, 0x85, &data);
+	sprintf(str+strlen(str), "0x85:0x%02x, ", data);
+	s2mu106_read_reg(i2c, 0x86, &data);
+	sprintf(str+strlen(str), "0x86:0x%02x, ", data);
+#else
 	s2mu106_read_reg(i2c, 0x75, &data);
 	sprintf(str+strlen(str), "0x75:0x%02x, ", data);
 	s2mu106_read_reg(i2c, 0x7A, &data);
 	sprintf(str+strlen(str), "0x7A:0x%02x, ", data);
+#endif
 	s2mu106_read_reg(i2c, 0x95, &data);
 	sprintf(str+strlen(str), "0x95:0x%02x, ", data);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	s2mu106_read_reg(i2c, 0xA5, &data);
+	sprintf(str+strlen(str), "0xA5:0x%02x, ", data);
+	s2mu106_read_reg(i2c, 0xA6, &data);
+	sprintf(str+strlen(str), "0xA6:0x%02x, ", data);
+#else
 	s2mu106_read_reg(i2c, 0x98, &data);
 	sprintf(str+strlen(str), "0x98:0x%02x, ", data);
-
+#endif
 	s2mu106_read_reg(i2c, 0xF1, &data);
 	pr_err("%s: %s0xF1:0x%02x\n", __func__, str, data);
 }
@@ -212,12 +232,56 @@ static void regmode_vote(struct s2mu106_charger_data *charger, int voter, int va
 		/* auto async mode */
 		s2mu106_update_reg(charger->i2c, 0x3A, 0x01, 0x03);
 	} else {
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+		if (!charger->is_boosting)
+			s2mu106_update_reg(charger->i2c, 0x3A, 0x01, 0x03); // SET_Auto Async
+#else
 		s2mu106_update_reg(charger->i2c, 0x3A, 0x01, 0x03); // SET_Auto Async
+#endif
 		s2mu106_update_reg(charger->i2c,
 				S2MU106_CHG_CTRL0, set_val, REG_MODE_MASK);
 	}
 	mutex_unlock(&charger->regmode_mutex);
 }
+
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+static void s2mu106_set_vf_boost(
+	struct s2mu106_charger_data *charger, int vbst)
+{
+	u8 temp;
+
+	switch (vbst) {
+	case OTG_9V:
+		s2mu106_update_reg(charger->i2c, 0x82, 0x0F, 0x0F);
+		s2mu106_update_reg(charger->i2c, 0x83, 0x2A, 0x3F);
+		s2mu106_update_reg(charger->i2c, 0xA5, 0x1A, 0x3F);
+
+		s2mu106_update_reg(charger->i2c, 0x85, 0x00, 0xF0);
+		s2mu106_update_reg(charger->i2c, 0xA6, 0x00, 0x0F);
+		s2mu106_update_reg(charger->i2c, 0x86, 0x00, 0x7F);
+		s2mu106_read_reg(charger->i2c, 0x86, &temp);
+		usleep_range(10000, 15000);
+		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL11, 0x64);
+		queue_delayed_work(charger->charger_wqueue, &charger->otg_bst_work,
+				msecs_to_jiffies(OTG_BST_WORK_DELAY));
+
+		pr_info("[DEBUG]%s: BST voltage 9V - 0x86(0x%02x->0x%02x)\n",
+					__func__, charger->reg_0x86, temp);
+		break;
+	case OTG_5V:
+		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL11, 0x16);
+		s2mu106_update_reg(charger->i2c, 0x83, 0x20, 0x3F);
+		s2mu106_update_reg(charger->i2c, 0xA5, 0x10, 0x3F);
+		s2mu106_update_reg(charger->i2c, 0x82, 0x0A, 0x0F);
+		pr_info("[DEBUG]%s: BST voltage 5V\n", __func__);
+		break;
+	default:
+		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL11, 0x16);
+		pr_info("[DEBUG]%s: wrong data, set default\n", __func__);
+		break;
+	}
+}
+#endif
 
 #if defined(CONFIG_WIRELESS_TX_MODE)
 static void s2mu106_check_tx_before_otg_on(struct s2mu106_charger_data *charger)
@@ -300,6 +364,16 @@ static int s2mu106_charger_otg_control(
 		s2mu106_update_reg(charger->i2c, 0x94, 0x08, 0x0C);
 		psy_do_property("wireless", set,
 			POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL, value);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+		s2mu106_update_reg(charger->i2c, 0x86, (charger->reg_0x86 & 0x7F), 0x7F);
+		s2mu106_update_reg(charger->i2c, 0x85, 0x80, 0xF0);
+		if (!charger->pdata->block_otg_psk_mode_en)
+			s2mu106_update_reg(charger->i2c, 0xA6, 0x08, 0x0F);
+		s2mu106_update_reg(charger->i2c, 0x83, 0x20, 0x3F);
+		s2mu106_update_reg(charger->i2c, 0xA5, 0x10, 0x3F);
+		s2mu106_update_reg(charger->i2c, 0x82, 0x0A, 0x0F);
+		cancel_delayed_work(&charger->otg_bst_work);
+#endif
 	} else {
 		psy_do_property("wireless", set,
 			POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL, value);
@@ -694,6 +768,11 @@ static bool s2mu106_chg_init(struct s2mu106_charger_data *charger)
 	/* ICR Disable */
 	s2mu106_update_reg(charger->i2c, 0x7D, 0x02, 0x02);
 
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	/* 9V Boost Operation */
+	s2mu106_read_reg(charger->i2c, 0x86, &charger->reg_0x86);
+#endif
+
 	/* 9V charging efficiency */
 	s2mu106_read_reg(charger->i2c, 0x9E, &charger->reg_0x9E);
 
@@ -724,8 +803,12 @@ static bool s2mu106_chg_init(struct s2mu106_charger_data *charger)
 
 	/* ivr debounce time(default 10ms -> 30ms) */
 	s2mu106_update_reg(charger->i2c, 0x95, 0x03, 0x03);
-	
+
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	s2mu106_set_vf_boost(charger, OTG_5V);
+#else
 	s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL11, 0x16);
+#endif
 
 #ifdef CONFIG_S2MU106_TYPEC_WATER
 	/* Prevent sudden power off when water detect */
@@ -1215,6 +1298,13 @@ static int s2mu106_chg_set_property(struct power_supply *psy,
 			if (is_nocharge_type(charger->cable_type))
 				s2mu106_set_wireless_input_current(charger, input_current);
 			charger->input_current = input_current;
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+			if (input_current == 1000) {
+				usleep_range(10000, 15000);
+				s2mu106_update_reg(charger->i2c, 0x3A, 0x01, 0x03);
+				pr_info("%s, change 0x3A[1:0] = 01\n", __func__);
+			}
+#endif
 		}
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
@@ -1621,6 +1711,9 @@ static int s2mu106_otg_set_property(struct power_supply *psy,
 		const union power_supply_propval *val)
 {
 	struct s2mu106_charger_data *charger =  power_supply_get_drvdata(psy);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	enum power_supply_ext_property ext_psp = (enum power_supply_ext_property) psp;
+#endif
 	union power_supply_propval value;
 	int ret;
 
@@ -1643,11 +1736,59 @@ static int s2mu106_otg_set_property(struct power_supply *psy,
 				__func__, mfc_fw_update);
 		}
 		break;
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
+		switch (ext_psp) {
+		case POWER_SUPPLY_EXT_PROP_OTG_VOLTAGE:
+			s2mu106_set_vf_boost(charger, val->intval);
+			break;
+		case POWER_SUPPLY_EXT_PROP_SELECT_PDO_9V:
+			if (val->intval == 0) {
+				charger->is_boosting = true;
+				s2mu106_update_reg(charger->i2c, 0x3A, 0x03, 0x03);
+				pr_info("%s, change 0x3A[1:0] = 11\n", __func__);
+			} else {
+				charger->is_boosting = false;
+			}
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
 	return 0;
 }
+
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+static void s2mu106_charger_otg_bst_work(struct work_struct *work)
+{
+	struct s2mu106_charger_data *charger = container_of(work,
+			struct s2mu106_charger_data,
+			otg_bst_work.work);
+
+	u8 data = 0;
+
+	while (data < charger->reg_0x86) {
+		data += 1;
+		s2mu106_update_reg(charger->i2c, 0x86, data, 0x7F);
+
+		usleep_range(1000, 1100);
+	}
+
+	s2mu106_update_reg(charger->i2c, 0x85, 0x80, 0xF0);
+	if (!charger->pdata->block_otg_psk_mode_en)
+		s2mu106_update_reg(charger->i2c, 0xA6, 0x08, 0x0F);
+
+	s2mu106_test_read(charger->i2c);
+	cancel_delayed_work(&charger->otg_bst_work);
+
+	s2mu106_read_reg(charger->i2c, 0x86, &data);
+	pr_info("%s, 0x86 register(0x%02x, 0x%02x)\n", __func__, data, charger->reg_0x86);
+}
+#endif
 
 static void s2mu106_charger_otg_vbus_work(struct work_struct *work)
 {
@@ -1678,7 +1819,11 @@ static void s2mu106_charger_otg_vbus_work(struct work_struct *work)
 		}
 	}
 
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	s2mu106_set_vf_boost(charger, OTG_5V);
+#else
 	s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL11, 0x16);
+#endif
 }
 
 #if EN_BAT_DET_IRQ
@@ -2347,11 +2492,17 @@ static int s2mu106_charger_probe(struct platform_device *pdev)
 		goto err_create_wq;
 	}
 
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	charger->is_boosting = false;
+#endif
 	wake_lock_init(&charger->ivr_wake_lock, WAKE_LOCK_SUSPEND,
 		"charger-ivr");
 	wake_lock_init(&charger->wc_current_wake_lock,
 		WAKE_LOCK_SUSPEND, "charger->wc-current");
 	INIT_DELAYED_WORK(&charger->otg_vbus_work, s2mu106_charger_otg_vbus_work);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	INIT_DELAYED_WORK(&charger->otg_bst_work, s2mu106_charger_otg_bst_work);
+#endif
 	INIT_DELAYED_WORK(&charger->ivr_work, s2mu106_ivr_irq_work);
 	INIT_DELAYED_WORK(&charger->wc_current_work, s2mu106_wc_current_work);
 
@@ -2532,7 +2683,11 @@ static void s2mu106_charger_shutdown(struct platform_device *pdev)
 		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL2, 0x12);
 		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL3, 0x10);
 		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL5, 0x3C);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+		s2mu106_set_vf_boost(charger, OTG_5V);
+#else
 		s2mu106_write_reg(charger->i2c, S2MU106_CHG_CTRL11, 0x16);
+#endif
 	}
 #endif
 	pr_info("%s: S2MU106 Charger driver shutdown\n", __func__);

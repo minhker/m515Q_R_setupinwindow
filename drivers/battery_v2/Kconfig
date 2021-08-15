@@ -89,7 +89,13 @@ config NEW_STEP_CHARGING_CONCEPT
 	bool "support for new_step charging_concept"
 	help
 	 Say Y to include support for new_step charging_concept
-	 
+
+config SUPPORT_9V_D2D_CHARGING
+	bool "support for 9V D2D charging"
+	help
+	default n
+	 Say Y to include support for 9V D2D charging
+
 config ENABLE_FULL_BY_SOC
 	bool "make full by soc 100%"
 	help

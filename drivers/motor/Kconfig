@@ -30,4 +30,8 @@ config BOOST_POWER_SHARE
 	help
 	  Say Y to enable Boost Power(5V) share.
 
-
+config MSM_VIBRATOR
+	tristate "MSM_VIBRATOR"
+	default n
+	help
+	  Say Y to enable MSM_VIBRATOR support

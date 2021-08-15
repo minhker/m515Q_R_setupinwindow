@@ -521,7 +521,7 @@ static int mmc_devfreq_set_target(struct device *dev,
 		*freq, current->comm);
 
 	spin_lock_bh(&clk_scaling->lock);
-	if (clk_scaling->target_freq == *freq ||
+	if (clk_scaling->curr_freq == *freq ||
 		clk_scaling->skip_clk_scale_freq_update) {
 		spin_unlock_bh(&clk_scaling->lock);
 		goto out;
@@ -4262,10 +4262,14 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 
 int _mmc_detect_card_removed(struct mmc_host *host)
 {
-	int ret;
+	int ret, i = 0;
+	u64 total_crc_cnt = 0, total_tmo_cnt = 0;
+	struct mmc_card_error_log *err_log;
 
 	if (!host->card || mmc_card_removed(host->card))
 		return 1;
+
+	err_log = host->card->err_log;
 
 	ret = host->bus_ops->alive(host);
 
@@ -4285,8 +4289,17 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 		mmc_card_set_removed(host->card);
 		pr_err("%s: card remove detected\n", mmc_hostname(host));
 
-		ST_LOG("<%s> %s: card remove detected\n",
-				__func__, mmc_hostname(host));
+		for (i = 0; i < 6; i++) {
+			if (err_log[i].err_type == -EILSEQ && total_crc_cnt < MAX_CNT_U64)
+				total_crc_cnt += err_log[i].count;
+			if (err_log[i].err_type == -ETIMEDOUT && total_tmo_cnt < MAX_CNT_U64)
+				total_tmo_cnt += err_log[i].count;
+		}
+
+		if (total_crc_cnt || total_tmo_cnt)
+			ST_LOG("<%s> %s: card remove detected. crc:%lld,tmo:%lld\n",
+					__func__, mmc_hostname(host),
+					total_crc_cnt, total_tmo_cnt);
 	}
 
 	return ret;
@@ -4564,9 +4577,11 @@ static int mmc_pm_notify(struct notifier_block *notify_block,
 	int err = 0, present = 0;
 
 	switch (mode) {
-	case PM_HIBERNATION_PREPARE:
-	case PM_SUSPEND_PREPARE:
 	case PM_RESTORE_PREPARE:
+	case PM_HIBERNATION_PREPARE:
+		if (host->bus_ops && host->bus_ops->pre_hibernate)
+			host->bus_ops->pre_hibernate(host);
+	case PM_SUSPEND_PREPARE:
 		spin_lock_irqsave(&host->lock, flags);
 		host->rescan_disable = 1;
 		spin_unlock_irqrestore(&host->lock, flags);
@@ -4605,9 +4620,11 @@ static int mmc_pm_notify(struct notifier_block *notify_block,
 		host->pm_flags = 0;
 		break;
 
-	case PM_POST_SUSPEND:
-	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
+	case PM_POST_HIBERNATION:
+		if (host->bus_ops && host->bus_ops->post_hibernate)
+			host->bus_ops->post_hibernate(host);
+	case PM_POST_SUSPEND:
 
 		spin_lock_irqsave(&host->lock, flags);
 		host->rescan_disable = 0;

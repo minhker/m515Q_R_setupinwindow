@@ -54,6 +54,7 @@
 #include "block.h"
 #include "core.h"
 #include "card.h"
+#include "crypto.h"
 #include "host.h"
 #include "bus.h"
 #include "mmc_ops.h"
@@ -72,7 +73,7 @@ MODULE_ALIAS("mmc:block");
 #endif
 #define MODULE_PARAM_PREFIX "mmcblk."
 
-#define MMC_BLK_TIMEOUT_MS  (20 * 1000)        /* 20 sec timeout */
+#define MMC_BLK_TIMEOUT_MS  (10 * 1000)        /* 20 sec timeout */
 #define MMC_SANITIZE_REQ_TIMEOUT 240000
 #define MMC_EXTRACT_INDEX_FROM_ARG(x) ((x & 0x00FF0000) >> 16)
 #define MMC_EXTRACT_VALUE_FROM_ARG(x) ((x & 0x0000FF00) >> 8)
@@ -2541,6 +2542,8 @@ static void mmc_blk_data_prep(struct mmc_queue *mq, struct mmc_queue_req *mqrq,
 
 	memset(brq, 0, sizeof(struct mmc_blk_request));
 
+	mmc_crypto_prepare_req(mqrq);
+
 	brq->mrq.data = &brq->data;
 
 	brq->stop.opcode = MMC_STOP_TRANSMISSION;
@@ -2846,7 +2849,8 @@ static int mmc_blk_cmdq_issue_discard_rq(struct mmc_queue *mq,
 
 	if (!mmc_can_erase(card)) {
 		err = -EOPNOTSUPP;
-		blk_end_request(req, err, blk_rq_bytes(req));
+		blk_end_request(req, errno_to_blk_status(err),
+				blk_rq_bytes(req));
 		goto out;
 	}
 
@@ -2897,7 +2901,8 @@ static int mmc_blk_cmdq_issue_secdiscard_rq(struct mmc_queue *mq,
 
 	if (!(mmc_can_secure_erase_trim(card))) {
 		err = -EOPNOTSUPP;
-		blk_end_request(req, err, blk_rq_bytes(req));
+		blk_end_request(req, errno_to_blk_status(err),
+				blk_rq_bytes(req));
 		goto out;
 	}
 
@@ -3555,7 +3560,7 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
 		mmc_cmdq_post_req(host, cmdq_req->tag, err);
 	if (cmdq_req->cmdq_req_flags & DCMD) {
 		clear_bit(CMDQ_STATE_DCMD_ACTIVE, &ctx_info->curr_state);
-		blk_end_request_all(rq, err);
+		blk_end_request_all(rq, err ? BLK_STS_IOERR : BLK_STS_OK);
 		goto out;
 	}
 	/*
@@ -3566,11 +3571,12 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
 	 */
 	if (err && cmdq_req->skip_err_handling) {
 		cmdq_req->skip_err_handling = false;
-		blk_end_request_all(rq, err);
+		blk_end_request_all(rq, BLK_STS_IOERR);
 		goto out;
 	}
 
-	blk_end_request(rq, err, cmdq_req->data.bytes_xfered);
+	blk_end_request(rq, err ? BLK_STS_IOERR : BLK_STS_OK,
+			cmdq_req->data.bytes_xfered);
 
 out:
 
@@ -3937,7 +3943,7 @@ static int mmc_blk_cmdq_issue_drv_op(struct mmc_card *card,
 	if (ret) {
 		pr_err("%s: failed to halt on empty queue\n",
 						mmc_hostname(card->host));
-		blk_end_request_all(req, ret);
+		blk_end_request_all(req, BLK_STS_IOERR);
 		mmc_put_card(card);
 		return ret;
 	}
@@ -4051,7 +4057,7 @@ static int mmc_blk_cmdq_issue_rq(struct mmc_queue *mq, struct request *req)
 
 out:
 	if (req)
-		blk_end_request_all(req, ret);
+		blk_end_request_all(req, ret ? BLK_STS_IOERR : BLK_STS_OK);
 	mmc_put_card(card);
 
 	return ret;
@@ -4206,7 +4212,7 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	INIT_LIST_HEAD(&md->part);
 	md->usage = 1;
 
-	ret = mmc_init_queue(&md->queue, card, &md->lock, subname, area_type);
+	ret = mmc_init_queue(&md->queue, card, NULL, subname, area_type);
 	if (ret)
 		goto err_putdisk;
 
@@ -4378,7 +4384,6 @@ static void mmc_blk_remove_req(struct mmc_blk_data *md)
 			spin_unlock_irq(md->queue.queue->queue_lock);
 		}
 		blk_set_queue_dying(md->queue.queue);
-		mmc_cleanup_queue(&md->queue);
 
 		if (md->flags & MMC_BLK_CMD_QUEUE)
 			mmc_cmdq_clean(&md->queue, card);
@@ -4399,6 +4404,7 @@ static void mmc_blk_remove_req(struct mmc_blk_data *md)
 
 			del_gendisk(md->disk);
 		}
+		mmc_cleanup_queue(&md->queue);
 		mmc_blk_put(md);
 	}
 }

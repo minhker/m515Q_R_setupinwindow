@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -140,7 +140,7 @@
 		src-clock-name = "csi2phytimer_clk_src";
 		clock-cntl-level = "svs", "svs_l1", "turbo";
 		clock-rates =
-			<0 0 0 0 270000000 0 300000000 0>,
+			<0 0 0 0 300000000 0 300000000 0>,
 			<0 0 0 0 360000000 0 300000000 0>,
 			<0 0 0 0 360000000 0 300000000 0>;
 		status = "ok";
@@ -497,19 +497,19 @@
 				};
 
 				iova-mem-region-io {
-					/* IO region is approximately 3 GB */
+					/* IO region is approximately 3.3 GB */
 					iova-region-name = "io";
-					iova-region-start = <0x10B11000>;
-					iova-region-len = <0xCF4EF000>;
+					iova-region-start = <0x10C00000>;
+					iova-region-len = <0xCF300000>;
 					iova-region-id = <0x3>;
 					status = "ok";
 				};
 
 				iova-mem-qdss-region {
-					/* qdss region is approximately 64K */
+					/* qdss region is approximately 1MB */
 					iova-region-name = "qdss";
 					iova-region-start = <0x10B00000>;
-					iova-region-len = <0x10000>;
+					iova-region-len = <0x100000>;
 					iova-region-id = <0x5>;
 					qdss-phy-addr = <0x16790000>;
 					status = "ok";
@@ -827,7 +827,7 @@
 		status = "ok";
 	};
 
-	qcom,cpas-cdm0@ac48000 {
+	camera:qcom,cpas-cdm0@ac48000 {
 		cell-index = <0>;
 		compatible = "qcom,cam170-cpas-cdm0";
 		label = "cpas-cdm";

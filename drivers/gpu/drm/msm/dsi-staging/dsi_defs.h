@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -96,6 +96,8 @@ enum dsi_op_mode {
  * @DSI_MODE_FLAG_VRR: Seamless transition is DynamicFPS.
  *                     New timing values are sent from DAL.
  * @DSI_MODE_FLAG_DYN_CLK: Seamless transition is dynamic clock change
+ * @DSI_MODE_FLAG_POMS:
+ *     Seamless transition is dynamic panel operating mode switch
  */
 enum dsi_mode_flags {
 	DSI_MODE_FLAG_SEAMLESS			= BIT(0),
@@ -104,6 +106,7 @@ enum dsi_mode_flags {
 	DSI_MODE_FLAG_DMS			= BIT(3),
 	DSI_MODE_FLAG_VRR			= BIT(4),
 	DSI_MODE_FLAG_DYN_CLK			= BIT(5),
+	DSI_MODE_FLAG_POMS			= BIT(6),
 };
 
 /**
@@ -238,6 +241,23 @@ enum dsi_dfps_type {
 };
 
 /**
+ * enum dsi_dyn_clk_feature_type - Dynamic clock feature support type
+ * @DSI_DYN_CLK_TYPE_LEGACY:	Constant FPS is not supported
+ * @DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_HFP:	Constant FPS supported with
+ *		change in hfp
+ * @DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_VFP:	Constant FPS supported with
+ *		change in vfp
+ * @DSI_DYN_CLK_TYPE_MAX:
+ */
+
+enum dsi_dyn_clk_feature_type {
+	DSI_DYN_CLK_TYPE_LEGACY = 0,
+	DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_HFP,
+	DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_VFP,
+	DSI_DYN_CLK_TYPE_MAX
+};
+
+/**
  * enum dsi_cmd_set_type  - DSI command set type
  * @DSI_CMD_SET_PRE_ON:	                   Panel pre on
  * @DSI_CMD_SET_ON:                        Panel on
@@ -266,9 +286,6 @@ enum dsi_dfps_type {
  */
 enum dsi_cmd_set_type {
 	DSI_CMD_SET_PRE_ON = 0,
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	DSI_CMD_SET_FD_ON_FACTORY,
-#endif
 	DSI_CMD_SET_ON,
 	DSI_CMD_SET_POST_ON,
 	DSI_CMD_SET_PRE_OFF,
@@ -537,6 +554,8 @@ enum dsi_cmd_set_type {
 	TX_FD_ON,
 	TX_FD_OFF,
 
+	TX_FD_ON_FACTORY,
+
 	TX_CMD_END,
 
 	/* RX */
@@ -651,6 +670,10 @@ struct dsi_cmd_desc {
 	struct mipi_dsi_msg msg;
 	bool last_command;
 	u32  post_wait_ms;
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	u8 *ss_txbuf;
+#endif
 };
 
 /**
@@ -669,8 +692,12 @@ struct dsi_panel_cmd_set {
 	struct dsi_cmd_desc *cmds;
 
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 #define SUPPORT_PANEL_REVISION	20
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	int ss_cmd_type;
+#endif
 	int read_startoffset;
 	char *name;
 	int exclusive_pass;
@@ -729,6 +756,24 @@ struct dsi_mode_info {
 	bool dsc_enabled;
 	struct msm_display_dsc_info *dsc;
 	struct msm_roi_caps roi_caps;
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	/* Identify VRR HS by drm_mode's name.
+	 * drm_mode's name is defined by dsi_mode->timing.sot_hs_mode parsed
+	 * from samsung,mdss-dsi-sot-hs-mode in panel dtsi file.
+	 * ex) drm_mode->name is "1080x2316x60x193345cmdHS" for HS mode.
+	 *     drm_mode->name is "1080x2316x60x193345cmdNS" for NS mode.
+	 * To use this feature, declare different porch between HS and NS modes,
+	 * in panel dtsi file.
+	 * Refer to ss_is_sot_hs_from_drm_mode().
+	 */
+	bool sot_hs_mode;
+
+	/* DDI Passive mode.
+	 * ex) DDI 120hz + TE(AP) is 60hz.
+	 */
+	bool phs_mode;
+#endif
 };
 
 /**
@@ -763,6 +808,8 @@ struct dsi_split_link_config {
  * @t_clk_pre:           Number of byte clock cycles that the high spped clock
  *                       shall be driven prior to data lane transitions from LP
  *                       to HS mode.
+ * @t_clk_pre_extend:    Increment t_clk_pre counter by 2 byteclk if set to
+ *                       true, otherwise increment by 1 byteclk.
  * @ignore_rx_eot:       Ignore Rx EOT packets if set to true.
  * @append_tx_eot:       Append EOT packets for forward transmissions if set to
  *                       true.
@@ -788,6 +835,7 @@ struct dsi_host_common_cfg {
 	bool bit_swap_blue;
 	u32 t_clk_post;
 	u32 t_clk_pre;
+	bool t_clk_pre_extend;
 	bool ignore_rx_eot;
 	bool append_tx_eot;
 	u32 ext_bridge_num;
@@ -888,7 +936,11 @@ struct dsi_host_config {
  * @roi_caps:		  Panel ROI capabilities
  */
 struct dsi_display_mode_priv_info {
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	struct dsi_panel_cmd_set cmd_sets[SS_DSI_CMD_SET_MAX];
+#else
 	struct dsi_panel_cmd_set cmd_sets[DSI_CMD_SET_MAX];
+#endif
 
 	u32 *phy_timing_val;
 	u32 phy_timing_len;
@@ -911,11 +963,13 @@ struct dsi_display_mode_priv_info {
  * @timing:         Timing parameters for the panel.
  * @pixel_clk_khz:  Pixel clock in Khz.
  * @dsi_mode_flags: Flags to signal other drm components via private flags
+ * @panel_mode:     Panel operating mode
  * @priv_info:      Mode private info
  */
 struct dsi_display_mode {
 	struct dsi_mode_info timing;
 	u32 pixel_clk_khz;
+	enum dsi_op_mode panel_mode;
 	u32 dsi_mode_flags;
 	struct dsi_display_mode_priv_info *priv_info;
 };

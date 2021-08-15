@@ -104,6 +104,7 @@ extern char *sec_cable_type[];
 #define HV_CHARGER_STATUS_STANDARD1	12000 /* mW */
 #define HV_CHARGER_STATUS_STANDARD2 20000 /* mW */
 #define HV_CHARGER_STATUS_STANDARD3 25000 /* mW */
+#define HV_CHARGER_STATUS_STANDARD4 40000 /* mW */
 enum {
 	NORMAL_TA,
 	AFC_9V_OR_15W,
@@ -123,9 +124,13 @@ enum {
 #define TEMP_HIGHLIMIT_THRESHOLD 		700
 #define TEMP_HIGHLINMIT_RECOVERY 		680
 
+struct sec_ttf_data;
+
+
 struct sec_battery_info {
 	struct device *dev;
 	//sec_battery_platform_data_t *pdata;
+	struct sec_ttf_data *ttf_d;
 
 	/* power supply used in Android */
 	struct power_supply *psy_bat;
@@ -319,7 +324,7 @@ extern int swelling_index[SWELLING_TYPE_CNT][JEITA_MAX];
 extern int swelling_type;
 
 extern unsigned int lpcharge;
-
+extern int get_pd_active(struct sec_battery_info *battery);
 extern void sec_bat_set_current_event(unsigned int current_event_val, unsigned int current_event_mask);
 extern void sec_bat_set_misc_event(unsigned int misc_event_val, unsigned int misc_event_mask);
 extern void sec_bat_set_slate_mode(struct sec_battery_info *battery);

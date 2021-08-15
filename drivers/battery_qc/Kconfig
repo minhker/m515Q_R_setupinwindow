@@ -26,3 +26,10 @@ config DIRECT_CHARGING
 	bool "support for direct charging"
 	help
 	 Say Y to include support for direct charging
+
+config CALC_TIME_TO_FULL
+	tristate "calculate time to full"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to use calc time to full function.

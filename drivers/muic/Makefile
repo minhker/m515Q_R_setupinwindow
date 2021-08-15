@@ -2,6 +2,14 @@
 # Makefile for muic devices
 #
 
+ifeq ($(CONFIG_USE_MUIC_LEGO),y) # LEGO style
+obj-y					+= common/muic-core.o
+obj-$(CONFIG_MUIC_NOTIFIER)		+= common/muic_notifier.o
+obj-$(CONFIG_MUIC_SM5714)		+= sm/sm5714/sm5714-muic.o sm/sm5714/sm5714-muic-afc.o
+ifeq ($(CONFIG_MUIC_SUPPORT_PDIC), y)
+obj-$(CONFIG_MUIC_SM5714)		+= sm/sm5714/sm5714-muic-pdic.o
+endif
+else # Not LEGO style
 obj-$(CONFIG_MUIC_KEYBOARD)		+= keyboard_notifier.o
 
 ifeq ($(CONFIG_MUIC_S2MU004),y)
@@ -39,9 +47,9 @@ obj-$(CONFIG_MUIC_S2MU107)		+= s2mu107-muic-afc.o
 obj-$(CONFIG_MUIC_S2MU106)		+= s2mu106-muic.o
 obj-$(CONFIG_MUIC_S2MU106)		+= s2mu106-muic-afc.o
 
-
 # MUIC SM5713
 obj-$(CONFIG_MUIC_SM5713)	+= sm5713-muic.o sm5713-muic-afc.o
 ifeq ($(CONFIG_MUIC_SUPPORT_CCIC),y)
 obj-$(CONFIG_MUIC_SM5713)	+= sm5713-muic-ccic.o
+endif
 endif

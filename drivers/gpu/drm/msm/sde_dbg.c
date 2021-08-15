@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,8 +23,9 @@
 
 #include "sde_dbg.h"
 #include "sde/sde_hw_catalog.h"
+#include "msm_drv.h"
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 #include "ss_dsi_panel_common.h"
 #endif
 
@@ -83,7 +84,7 @@
 #define DUMP_LINE_SIZE			256
 #define DUMP_MAX_LINES_PER_BLK		512
 
-#ifdef CONFIG_DISPLAY_SAMSUNG
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 /**
  * To print in kernel log
  */
@@ -4028,7 +4029,7 @@ static void _sde_dump_array(struct sde_dbg_reg_base *blk_arr[],
 		dsi_ctrl_debug_dump(sde_dbg_base.dbgbus_dsi.entries,
 				    sde_dbg_base.dbgbus_dsi.size);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	if (do_panic && sde_dbg_base.panic_on_err)
 		ss_store_xlog_panic_dbg();
 #endif
@@ -4187,7 +4188,7 @@ void sde_dbg_ctrl(const char *name, ...)
 	va_end(args);
 }
 
-
+#ifdef CONFIG_DEBUG_FS
 /*
  * sde_dbg_debugfs_open - debugfs open handler for evtlog dump
  * @inode: debugfs inode
@@ -5068,18 +5069,41 @@ static const struct file_operations sde_reg_fops = {
 	.write = sde_dbg_reg_base_reg_write,
 };
 
-int sde_dbg_debugfs_register(struct dentry *debugfs_root)
+int sde_dbg_debugfs_register(struct device *dev)
 {
 	static struct sde_dbg_base *dbg = &sde_dbg_base;
 	struct sde_dbg_reg_base *blk_base;
 	char debug_name[80] = "";
+	struct dentry *debugfs_root = NULL;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct drm_device *ddev = platform_get_drvdata(pdev);
+	struct msm_drm_private *priv = NULL;
 
-	if (!debugfs_root)
+	if (!ddev) {
+		pr_err("Invalid drm device node\n");
 		return -EINVAL;
+	}
+
+	priv = ddev->dev_private;
+	if (!priv) {
+		pr_err("Invalid msm drm private node\n");
+		return -EINVAL;
+	}
+
+	debugfs_root = debugfs_create_dir("debug",
+				ddev->primary->debugfs_root);
+	if (IS_ERR_OR_NULL(debugfs_root)) {
+		pr_err("debugfs_root create_dir fail, error %ld\n",
+			PTR_ERR(debugfs_root));
+		priv->debug_root = NULL;
+		return -EINVAL;
+	}
+
+	priv->debug_root = debugfs_root;
 
 	debugfs_create_file("dbg_ctrl", 0600, debugfs_root, NULL,
 			&sde_dbg_ctrl_fops);
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	debugfs_create_file("dump", 0644, debugfs_root, NULL,
 			&sde_evtlog_fops);
 #else
@@ -5134,6 +5158,15 @@ int sde_dbg_debugfs_register(struct dentry *debugfs_root)
 
 	return 0;
 }
+
+#else
+
+int sde_dbg_debugfs_register(struct device *dev)
+{
+	return 0;
+}
+
+#endif
 
 static void _sde_dbg_debugfs_destroy(void)
 {
@@ -5207,7 +5240,7 @@ int sde_dbg_init(struct device *dev, struct sde_dbg_power_ctrl *power_ctrl)
 
 	INIT_WORK(&sde_dbg_base.dump_work, _sde_dump_work);
 	sde_dbg_base.work_panic = false;
-#if defined(CONFIG_DISPLAY_SAMSUNG) && defined(CONFIG_SEC_DEBUG)
+#if (defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)) && defined(CONFIG_SEC_DEBUG)
 	if (sec_debug_is_enabled())
 		sde_dbg_base.panic_on_err = DEFAULT_PANIC;
 	else

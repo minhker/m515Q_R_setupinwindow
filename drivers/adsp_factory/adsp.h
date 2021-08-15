@@ -76,6 +76,7 @@ struct adsp_data {
 	struct mutex prox_factory_mutex;
 	struct mutex light_factory_mutex;
 	struct mutex accel_factory_mutex;
+	struct mutex flip_cover_factory_mutex;
 	struct mutex remove_sysfs_mutex;
 
 #ifdef CONFIG_SUPPORT_LIGHT_READ_UBID
@@ -109,7 +110,6 @@ void prox_factory_init_work(void);
 void light_ub_read_init_work(struct adsp_data *data);
 void light_ub_read_work_func(struct work_struct *work);
 #endif
-
 #ifdef CONFIG_GP2AP110S_FACTORY
 void prox_gp2ap110s_init_settings(struct adsp_data *data);
 #endif

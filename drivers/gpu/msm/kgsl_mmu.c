@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017,2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,7 @@
 #include "kgsl_device.h"
 #include "kgsl_sharedmem.h"
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 #include <linux/delay.h>
 #endif
 
@@ -398,7 +398,7 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 				struct kgsl_memdesc *memdesc)
 {
 	int size;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	int retry_cnt;
 #endif
 
@@ -419,15 +419,15 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 
 		ret = pagetable->pt_ops->mmu_map(pagetable, memdesc);
 
-		
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 		if (ret != 0 && !in_interrupt()) {
 			for (retry_cnt = 0; retry_cnt < 62 ; retry_cnt++) {
 				/* To wait free page by memory reclaim*/
 				usleep_range(16000, 16000);
 
 				pr_err("kgsl_mmu_map failed : retry (%d) ret : %d\n", retry_cnt, ret);
-				
+
 				ret = pagetable->pt_ops->mmu_map(pagetable, memdesc);
 				if (ret == 0)
 					break;
@@ -736,6 +736,7 @@ static struct kgsl_pagetable *nommu_getpagetable(struct kgsl_mmu *mmu,
 static int nommu_init(struct kgsl_mmu *mmu)
 {
 	mmu->features |= KGSL_MMU_GLOBAL_PAGETABLE;
+	set_bit(KGSL_MMU_STARTED, &mmu->flags);
 	return 0;
 }
 

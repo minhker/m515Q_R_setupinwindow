@@ -264,7 +264,61 @@ SEC_M51_SWA_DTBO := \
                 sm7150-sec-m51-swa-overlay-r00.dtbo \
                 sm7150-sec-m51-swa-overlay-r01.dtbo \
                 sm7150-sec-m51-swa-overlay-r02.dtbo 
-				
+
+# A52Q EUR
+SEC_A52Q_EUR_DTBO := \
+		atoll-sec-a52q-eur-overlay-r00.dtbo \
+		atoll-sec-a52q-eur-overlay-r01.dtbo \
+		atoll-sec-a52q-eur-overlay-r02.dtbo \
+		atoll-sec-a52q-eur-overlay-r04.dtbo \
+		atoll-sec-a52q-eur-overlay-r05.dtbo \
+		atoll-sec-a52q-eur-overlay-r06.dtbo
+
+# A52Q LTN
+SEC_A52Q_LTN_DTBO := \
+		atoll-sec-a52q-ltn-overlay-r04.dtbo \
+		atoll-sec-a52q-ltn-overlay-r05.dtbo \
+		atoll-sec-a52q-ltn-overlay-r06.dtbo
+
+# A72Q EUR
+SEC_A72Q_EUR_DTBO := \
+		atoll-sec-a72q-eur-overlay-r00.dtbo \
+		atoll-sec-a72q-eur-overlay-r01.dtbo \
+		atoll-sec-a72q-eur-overlay-r02.dtbo \
+		atoll-sec-a72q-eur-overlay-r04.dtbo \
+		atoll-sec-a72q-eur-overlay-r05.dtbo
+
+# A72Q LTN
+SEC_A72Q_LTN_DTBO := \
+		atoll-sec-a72q-ltn-overlay-r00.dtbo \
+		atoll-sec-a72q-ltn-overlay-r01.dtbo \
+		atoll-sec-a72q-ltn-overlay-r02.dtbo \
+		atoll-sec-a72q-ltn-overlay-r04.dtbo \
+		atoll-sec-a72q-ltn-overlay-r05.dtbo
+
+# M42Q EUR
+SEC_M42Q_EUR_DTBO := \
+		atoll-sec-m42q-eur-overlay-r00.dtbo \
+		atoll-sec-m42q-eur-overlay-r01.dtbo \
+		atoll-sec-m42q-eur-overlay-r02.dtbo \
+		atoll-sec-m42q-eur-overlay-r04.dtbo \
+		atoll-sec-m42q-eur-overlay-r05.dtbo \
+		atoll-sec-m42q-eur-overlay-r06.dtbo
+
+# M42Q JPN
+SEC_M42Q_JPN_DTBO := \
+		atoll-sec-m42q-jpn-overlay-r00.dtbo \
+		atoll-sec-m42q-jpn-overlay-r01.dtbo \
+		atoll-sec-m42q-jpn-overlay-r02.dtbo \
+		atoll-sec-m42q-jpn-overlay-r04.dtbo
+
+# M42Q USA
+SEC_M42Q_USA_DTBO := \
+		atoll-sec-m42q-usa-overlay-r01.dtbo \
+		atoll-sec-m42q-usa-overlay-r02.dtbo \
+		atoll-sec-m42q-usa-overlay-r04.dtbo \
+		atoll-sec-m42q-usa-overlay-r06.dtbo
+
 define __sec_dtbo_build
 dtbo-$(2) += $(1)
 $(1)-base := $(3)
@@ -279,6 +333,9 @@ SEC_SM6150_BASE_DTB := ../qcom/sm6150.dtb
 
 # SM7150 BASE DTB
 SEC_SM7150_BASE_DTB := ../qcom/sdmmagpie.dtb
+
+# SM7125 BASE DTB
+SEC_ATOLL_BASE_DTB := ../qcom/atoll-ab-idp.dtb
 
 $(eval $(call sec_dtbo_build, \
 		$(SEC_A60Q_CHN_DTBO),$(CONFIG_SEC_A60Q_CHN_PROJECT),$(SEC_SM6150_BASE_DTB)))
@@ -367,6 +424,26 @@ $(eval $(call sec_dtbo_build, \
 $(eval $(call sec_dtbo_build, \
 		$(SEC_M51_SWA_DTBO),$(CONFIG_SEC_M51_SWA_PROJECT),$(SEC_SM7150_BASE_DTB)))		
 
+$(eval $(call sec_dtbo_build, \
+		$(SEC_A52Q_EUR_DTBO),$(CONFIG_SEC_A52Q_EUR_OPEN),$(SEC_ATOLL_BASE_DTB)))
+
+$(eval $(call sec_dtbo_build, \
+		$(SEC_A52Q_LTN_DTBO),$(CONFIG_SEC_A52Q_LTN_OPEN),$(SEC_ATOLL_BASE_DTB)))
+		
+$(eval $(call sec_dtbo_build, \
+		$(SEC_A72Q_EUR_DTBO),$(CONFIG_SEC_A72Q_EUR_OPEN),$(SEC_ATOLL_BASE_DTB)))
+
+$(eval $(call sec_dtbo_build, \
+		$(SEC_A72Q_LTN_DTBO),$(CONFIG_SEC_A72Q_LTN_OPEN),$(SEC_ATOLL_BASE_DTB)))
+
+$(eval $(call sec_dtbo_build, \
+		$(SEC_M42Q_EUR_DTBO),$(CONFIG_SEC_M42Q_EUR_OPEN),$(SEC_ATOLL_BASE_DTB)))
+
+$(eval $(call sec_dtbo_build, \
+		$(SEC_M42Q_JPN_DTBO),$(CONFIG_SEC_M42Q_JPN_OPEN),$(SEC_ATOLL_BASE_DTB)))
+
+$(eval $(call sec_dtbo_build, \
+		$(SEC_M42Q_USA_DTBO),$(CONFIG_SEC_M42Q_USA_OPEN),$(SEC_ATOLL_BASE_DTB)))
 endif
 
 ifeq ($(CONFIG_ARM64),y)

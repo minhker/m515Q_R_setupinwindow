@@ -36,9 +36,14 @@
 #include <linux/ccic/ccic_notifier.h>
 #endif /* CONFIG_CCIC_NOTIFIER */
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
-#endif
+#endif /* CONFIG_USE_MUIC_LEGO */
+#endif /* CONFIG_MUIC_NOTIFIER */
 #endif
 
 #if defined(CONFIG_BATTERY_NOTIFIER)
@@ -109,7 +114,7 @@ extern char *sec_cable_type[];
 #define BATT_MISC_EVENT_WIRELESS_AUTH_FAIL      0x00000800
 #define BATT_MISC_EVENT_WIRELESS_AUTH_PASS      0x00001000
 #define BATT_MISC_EVENT_TEMP_HICCUP_TYPE	0x00002000
-
+#define BATT_MISC_EVENT_HEALTH_OVERHEATLIMIT		0x00100000
 
 #if defined(CONFIG_SEC_FACTORY)             // SEC_FACTORY
 #define STORE_MODE_CHARGING_MAX 80
@@ -155,6 +160,8 @@ extern char *sec_cable_type[];
 #define HV_CHARGER_STATUS_STANDARD1	12000 /* mW */
 #define HV_CHARGER_STATUS_STANDARD2	20000 /* mW */
 #define HV_CHARGER_STATUS_STANDARD3 24500 /* mW */
+#define HV_CHARGER_STATUS_STANDARD4 40000 /* mW */
+
 enum {
 	NORMAL_TA,
 	AFC_9V_OR_15W,
@@ -239,9 +246,12 @@ struct cable_info {
 };
 #endif
 
+struct sec_ttf_data;
+
 struct sec_battery_info {
 	struct device *dev;
 	sec_battery_platform_data_t *pdata;
+	struct sec_ttf_data *ttf_d;
 
 	/* power supply used in Android */
 	struct power_supply *psy_bat;
@@ -276,6 +286,8 @@ struct sec_battery_info {
 	struct pdic_notifier_struct pdic_info;
 	struct sec_bat_pdic_list pd_list;
 #endif
+	bool update_pd_list;
+
 #if defined(CONFIG_VBUS_NOTIFIER)
 	struct notifier_block vbus_nb;
 	int muic_vbus_status;
@@ -284,6 +296,11 @@ struct sec_battery_info {
 	bool is_sysovlo;
 	bool is_vbatovlo;
 	bool is_abnormal_temp;
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+	bool is_bcd_support;
+	bool is_svid_support;
+	bool is_hp_pdo;
+#endif
 
 	bool safety_timer_set;
 	bool lcd_status;
@@ -571,10 +588,7 @@ struct sec_battery_info {
 #if defined(CONFIG_AFC_CHARGER_MODE)
 	char *hv_chg_name;
 #endif
-#if defined(CONFIG_CALC_TIME_TO_FULL)
-	int timetofull;
-	struct delayed_work timetofull_work;
-#endif
+
 #if defined(CONFIG_WIRELESS_TX_MODE)
 	int tx_avg_curr;
 	int tx_time_cnt;
@@ -668,6 +682,9 @@ extern int fg_reset;
 extern int factory_mode;
 
 extern void select_pdo(int num);
+#if defined(CONFIG_SUPPORT_9V_D2D_CHARGING)
+extern void change_thermal_source_cap(int enable, int max_cur);
+#endif
 #if defined(CONFIG_PDIC_PD30)
 extern int sec_pd_select_pps(int num, int ppsVol, int ppsCur);
 extern int sec_pd_get_apdo_max_power(unsigned int *pdo_pos, unsigned int *taMaxVol, unsigned int *taMaxCur, unsigned int *taMaxPwr);
@@ -731,5 +748,6 @@ extern int sec_bat_misc_init(struct sec_battery_info *battery);
 int sec_bat_parse_dt(struct device *dev, struct sec_battery_info *battery);
 void sec_bat_parse_mode_dt(struct sec_battery_info *battery);
 void sec_bat_parse_mode_dt_work(struct work_struct *work);
+bool sec_bat_hv_wc_normal_mode_check(struct sec_battery_info *battery);
 
 #endif /* __SEC_BATTERY_H */

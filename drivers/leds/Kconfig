@@ -660,6 +660,15 @@ config LEDS_IS31FL32XX
 	  LED controllers. They are I2C devices with multiple constant-current
 	  channels, each with independent 256-level PWM control.
 
+config LEDS_QCOM_CLK
+	tristate "LED Support for cock controller based PWM drvier"
+	depends on OF && PINCTRL && LEDS_CLASS
+	help
+	  This option enables the driver for clock driven LED.
+	  This driver controls the duty cycle of clocks generated
+	  by Qualcomm Technologies, Inc Chipsets.
+	  It also configures the pinctrl to output the clock.
+
 comment "LED driver for blink(1) USB RGB LED is under Special HID drivers (HID_THINGM)"
 
 config LEDS_BLINKM
@@ -742,6 +751,12 @@ config LEDS_QPNP_VIBRATOR_LDO
 	  This option enables device driver support for the vibrator-ldo
 	  peripheral found on Qualcomm Technologies, Inc. QPNP PMICs.
 	  The vibrator-ldo peripheral is capable of driving ERM vibrators.
+	  
+config LEDS_SM5714
+	bool "LED support for the SM5714"
+	depends on LEDS_CLASS
+	help
+	This option enables support for the LEDs on the SM5714.
 
 config LEDS_S2MU107_FLASH
 	bool "FLASH LED support for the S2MU107"

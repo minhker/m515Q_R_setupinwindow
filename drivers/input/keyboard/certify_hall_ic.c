@@ -22,14 +22,13 @@
 #include <linux/spinlock.h>
 #include <linux/wakelock.h>
 
-#if !defined(TEMP_KBJ)
-extern struct device *sec_key;
+#ifndef CONFIG_SENSORS_HALL
+#include <linux/sec_class.h>
+struct device *hall_ic;
+EXPORT_SYMBOL(hall_ic);
 #else
-#include <linux/sec_class.h> 
-extern struct class *sec_class;
+extern struct device *hall_ic;
 #endif
-
-struct device *sec_device_create(void *drvdata, const char *fmt);
 
 struct certify_hall_drvdata {
 	struct input_dev *input;
@@ -61,7 +60,10 @@ static void certify_cover_work(struct work_struct *work)
 	struct certify_hall_drvdata *ddata =
 		container_of(work, struct certify_hall_drvdata,
 				certify_cover_dwork.work);
-
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+	char hall_uevent[20] = {0,};
+	char *hall_status[2] = {hall_uevent, NULL};
+#endif
 	first = !gpio_get_value(ddata->gpio_certify_cover);
 
 	pr_info("keys:%s #1 : %d\n", __func__, first);
@@ -76,6 +78,12 @@ static void certify_cover_work(struct work_struct *work)
 		certify_cover = first;
 		input_report_switch(ddata->input, SW_CERTIFYHALL, certify_cover);
 		input_sync(ddata->input);
+#if defined(CONFIG_SUPPORT_HALL_ABNORMAL_TEST)
+		/* send uevent for hall ic */
+		snprintf(hall_uevent, sizeof(hall_uevent), "certify_hall=%s",
+			!certify_cover ? "open" : "close");
+		kobject_uevent_env(&hall_ic->kobj, KOBJ_CHANGE, hall_status);
+#endif
 	}
 }
 #else
@@ -240,12 +248,10 @@ static int certify_hall_probe(struct platform_device *pdev)
 	init_certify_hall_ic_irq(input);
 
 	if (ddata->gpio_certify_cover != 0) {
-
-#if !defined(TEMP_KBJ)		
-		error = device_create_file(sec_key, &dev_attr_certify_hall_detect);
-#else
-		error = device_create_file(sec_class, &dev_attr_hall_detect);
-#endif		
+#ifndef CONFIG_SENSORS_HALL
+		hall_ic = sec_device_create(0, ddata, "hall_ic");
+#endif
+		error = device_create_file(hall_ic, &dev_attr_certify_hall_detect);
 		if (error < 0) {
 			pr_err("Failed to create device file(%s)!, error: %d\n",
 				dev_attr_certify_hall_detect.attr.name, error);

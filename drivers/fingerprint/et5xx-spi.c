@@ -634,16 +634,17 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			pr_info("%s FP_CPU_SPEEDUP ON:%d, retry: %d\n",
 					__func__, ioc->len, retry_cnt);
 #ifdef FP_DDR_FREQ_CONTROL
-			if(bus_hdl) {
+			if (bus_hdl) {
 				retval = msm_bus_scale_client_update_request(bus_hdl, MHZ_1555);
 				if(retval)
 					pr_info("%s Failed Bus clk up%d\n",
 						__func__, retval);
 			} else {
-				pr_info("%s Failed Bus clk up not registered %d\n", __func__);
+				pr_info("%s Failed Bus clk up not registered\n", __func__);
 			}
 #endif
 			if (etspi->min_cpufreq_limit) {
+#if 0
 				pm_qos_add_request(&etspi->pm_qos,
 					PM_QOS_CPU_DMA_LATENCY, 0);
 				do {
@@ -657,24 +658,27 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 						usleep_range(500, 510);
 					}
 				} while (retval && retry_cnt < 7);
+#endif
 			}
 		} else {
 			pr_info("%s FP_CPU_SPEEDUP OFF\n", __func__);
 #ifdef FP_DDR_FREQ_CONTROL
-			if(bus_hdl) {
+			if (bus_hdl) {
 				retval = msm_bus_scale_client_update_request(bus_hdl, MHZ_NONE);
 				if(retval)
 					pr_info("%s Failed Bus clk none%d\n",
 						__func__, retval);
 			} else {
-				pr_info("%s Failed Bus clk none not registered %d\n", __func__);
+				pr_info("%s Failed Bus clk none not registered\n", __func__);
 			}
 #endif
+#if 0
 			retval = set_freq_limit(DVFS_FINGER_ID, -1);
 			if (retval)
 				pr_err("%s: booster stop failed. (%d)\n"
 					, __func__, retval);
 			pm_qos_remove_request(&etspi->pm_qos);
+#endif
 		}
 		break;
 	case FP_SET_SENSOR_TYPE:
@@ -1272,7 +1276,7 @@ static int etspi_probe(struct spi_device *spi)
 	int retry = 0;
 #endif
 #ifdef FP_DDR_FREQ_CONTROL
-	int i=0;
+	int i = 0;
 #endif
 
 	pr_info("%s\n", __func__);
@@ -1423,7 +1427,7 @@ static int etspi_remove(struct spi_device *spi)
 
 	if (etspi != NULL) {
 #ifdef FP_DDR_FREQ_CONTROL
-		if(bus_hdl) {
+		if (bus_hdl) {
 			msm_bus_scale_unregister_client(bus_hdl);
 			pr_info("%s msm_bus_scale_unregister_client\n", __func__);
 		}

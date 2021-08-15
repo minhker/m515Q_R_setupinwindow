@@ -208,8 +208,10 @@ static ssize_t sec_therm_show_temperature(struct device *dev,
 	struct sec_therm_info *info = dev_get_drvdata(dev);
 	int adc, temp;
 
-	if (!info)
+	if (!info) {
 		pr_err("[%s] dev_get_drvdata is fails\n", __func__);
+		return -ENODEV;
+	}
 
 	adc = sec_therm_get_adc_data(info);
 
@@ -228,6 +230,11 @@ static ssize_t sec_therm_show_temp_adc(struct device *dev,
 	struct sec_therm_info *info = dev_get_drvdata(dev);
 	int adc;
 
+	if (!info) {
+		pr_err("[%s] dev_get_drvdata is fails\n", __func__);
+		return -ENODEV;
+	}
+
 	adc = sec_therm_get_adc_data(info);
 
 	return snprintf(buf, sizeof(PAGE_SIZE), "%d\n", adc);
@@ -237,6 +244,11 @@ static ssize_t sec_therm_show_name(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct sec_therm_info *info = dev_get_drvdata(dev);
+
+	if (!info) {
+		pr_err("[%s] dev_get_drvdata is fails\n", __func__);
+		return -ENODEV;
+	}
 
 	return snprintf(buf, sizeof(PAGE_SIZE), "%s\n", info->name);
 }

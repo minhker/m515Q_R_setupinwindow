@@ -368,7 +368,6 @@ struct samsung_display_dtsi_data {
 	bool samsung_support_factory_panel_swap;
 	bool samsung_reset_before_dsi_off; /*used for power off sequence Reset off-> (LP11->LP00) -> VCI(VPNL) off -> VDDI Off in panel SW83106 */
 	bool samsung_reset_after_dsi_on; /*used for power on sequence VDDI On -> VCI(VPNL) On -> min 1ms -> (LP00->LP11)  -> Reset On in panel SW83106 */
-	bool samsung_panel_poweroff_delay;
 	u32  samsung_power_on_reset_delay;
 	u32  samsung_dsi_off_reset_delay;
 	u32 samsung_lpm_init_delay;

@@ -50,8 +50,13 @@ extern struct class *sec_class;
 #include <linux/of_gpio.h>
 #include <linux/firmware.h>
 #ifdef CONFIG_VBUS_NOTIFIER
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #include <linux/vbus_notifier.h>
 #endif
 

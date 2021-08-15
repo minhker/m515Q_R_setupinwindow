@@ -3581,7 +3581,7 @@ static char DSI0_VIDEO_AUTO_MDNIE_11[] = {
 	0x40, //cm_lgain_6
 	0x40, //cm_lgain_7
 	0x38, //cm_lgain_8
-	0x38, //cm_lgain_9
+	0x40, //cm_lgain_9
 	0x40, //cm_lgain_10
 	0x40, //cm_lgain_11
 	0x40, //cm_lgain_12
@@ -3597,7 +3597,7 @@ static char DSI0_VIDEO_AUTO_MDNIE_12[] = {
 	0x80, //cm_hgain_6
 	0x80, //cm_hgain_7
 	0x78, //cm_hgain_8
-	0x76, //cm_hgain_9
+	0x80, //cm_hgain_9
 	0x80, //cm_hgain_10
 	0x80, //cm_hgain_11
 	0x80, //cm_hgain_12
@@ -3613,7 +3613,7 @@ static char DSI0_VIDEO_AUTO_MDNIE_13[] = {
 	0x80, //cm_angle_6
 	0xa0, //cm_angle_7
 	0x90, //cm_angle_8
-	0x97, //cm_angle_9
+	0x80, //cm_angle_9
 	0x80, //cm_angle_10
 	0x60, //cm_angle_11
 	0x80, //cm_angle_12
@@ -3955,7 +3955,7 @@ static char DSI0_CAMERA_AUTO_MDNIE_11[] = {
 	0x40, //cm_lgain_6
 	0x40, //cm_lgain_7
 	0x38, //cm_lgain_8
-	0x38, //cm_lgain_9
+	0x40, //cm_lgain_9
 	0x40, //cm_lgain_10
 	0x40, //cm_lgain_11
 	0x40, //cm_lgain_12
@@ -3971,7 +3971,7 @@ static char DSI0_CAMERA_AUTO_MDNIE_12[] = {
 	0x80, //cm_hgain_6
 	0x80, //cm_hgain_7
 	0x78, //cm_hgain_8
-	0x76, //cm_hgain_9
+	0x80, //cm_hgain_9
 	0x80, //cm_hgain_10
 	0x80, //cm_hgain_11
 	0x80, //cm_hgain_12
@@ -3987,7 +3987,7 @@ static char DSI0_CAMERA_AUTO_MDNIE_13[] = {
 	0x80, //cm_angle_6
 	0xa0, //cm_angle_7
 	0x90, //cm_angle_8
-	0x97, //cm_angle_9
+	0x80, //cm_angle_9
 	0x80, //cm_angle_10
 	0x60, //cm_angle_11
 	0x80, //cm_angle_12
@@ -4329,7 +4329,7 @@ static char DSI0_GALLERY_AUTO_MDNIE_11[] = {
 	0x40, //cm_lgain_6
 	0x40, //cm_lgain_7
 	0x38, //cm_lgain_8
-	0x38, //cm_lgain_9
+	0x40, //cm_lgain_9
 	0x40, //cm_lgain_10
 	0x40, //cm_lgain_11
 	0x40, //cm_lgain_12
@@ -4345,7 +4345,7 @@ static char DSI0_GALLERY_AUTO_MDNIE_12[] = {
 	0x80, //cm_hgain_6
 	0x80, //cm_hgain_7
 	0x78, //cm_hgain_8
-	0x76, //cm_hgain_9
+	0x80, //cm_hgain_9
 	0x80, //cm_hgain_10
 	0x80, //cm_hgain_11
 	0x80, //cm_hgain_12
@@ -4361,7 +4361,7 @@ static char DSI0_GALLERY_AUTO_MDNIE_13[] = {
 	0x80, //cm_angle_6
 	0xa0, //cm_angle_7
 	0x90, //cm_angle_8
-	0x97, //cm_angle_9
+	0x80, //cm_angle_9
 	0x80, //cm_angle_10
 	0x60, //cm_angle_11
 	0x80, //cm_angle_12
@@ -4703,7 +4703,7 @@ static char DSI0_BROWSER_AUTO_MDNIE_11[] = {
 	0x40, //cm_lgain_6
 	0x40, //cm_lgain_7
 	0x38, //cm_lgain_8
-	0x38, //cm_lgain_9
+	0x40, //cm_lgain_9
 	0x40, //cm_lgain_10
 	0x40, //cm_lgain_11
 	0x40, //cm_lgain_12
@@ -4719,7 +4719,7 @@ static char DSI0_BROWSER_AUTO_MDNIE_12[] = {
 	0x80, //cm_hgain_6
 	0x80, //cm_hgain_7
 	0x78, //cm_hgain_8
-	0x76, //cm_hgain_9
+	0x80, //cm_hgain_9
 	0x80, //cm_hgain_10
 	0x80, //cm_hgain_11
 	0x80, //cm_hgain_12
@@ -4735,7 +4735,7 @@ static char DSI0_BROWSER_AUTO_MDNIE_13[] = {
 	0x80, //cm_angle_6
 	0xa0, //cm_angle_7
 	0x90, //cm_angle_8
-	0x97, //cm_angle_9
+	0x80, //cm_angle_9
 	0x80, //cm_angle_10
 	0x60, //cm_angle_11
 	0x80, //cm_angle_12
@@ -5638,7 +5638,7 @@ static char DSI0_TDMB_AUTO_MDNIE_11[] = {
 	0x40, //cm_lgain_6
 	0x40, //cm_lgain_7
 	0x38, //cm_lgain_8
-	0x38, //cm_lgain_9
+	0x40, //cm_lgain_9
 	0x40, //cm_lgain_10
 	0x40, //cm_lgain_11
 	0x40, //cm_lgain_12
@@ -5654,7 +5654,7 @@ static char DSI0_TDMB_AUTO_MDNIE_12[] = {
 	0x80, //cm_hgain_6
 	0x80, //cm_hgain_7
 	0x78, //cm_hgain_8
-	0x76, //cm_hgain_9
+	0x80, //cm_hgain_9
 	0x80, //cm_hgain_10
 	0x80, //cm_hgain_11
 	0x80, //cm_hgain_12
@@ -5670,7 +5670,7 @@ static char DSI0_TDMB_AUTO_MDNIE_13[] = {
 	0x80, //cm_angle_6
 	0xa0, //cm_angle_7
 	0x90, //cm_angle_8
-	0x97, //cm_angle_9
+	0x80, //cm_angle_9
 	0x80, //cm_angle_10
 	0x60, //cm_angle_11
 	0x80, //cm_angle_12

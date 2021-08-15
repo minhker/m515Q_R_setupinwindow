@@ -424,6 +424,10 @@ int inc_dpui_u32_field(enum dpui_key key, u32 value)
 {
 	int ret;
 
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	return 0;
+#endif
+
 	mutex_lock(&dpui_lock);
 	ret = __inc_dpui_u32_field(key, value);
 	mutex_unlock(&dpui_lock);

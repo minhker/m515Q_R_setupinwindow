@@ -34,9 +34,14 @@
 #include <linux/ccic/ccic_notifier.h>
 #endif /* CONFIG_CCIC_NOTIFIER */
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
-#endif
+#endif /* CONFIG_USE_MUIC_LEGO */
+#endif /* CONFIG_MUIC_NOTIFIER */
 #endif
 
 #if defined(CONFIG_BATTERY_NOTIFIER)

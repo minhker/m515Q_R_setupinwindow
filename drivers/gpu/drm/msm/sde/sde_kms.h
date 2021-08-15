@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -105,7 +105,7 @@
 #define SDE_NAME_SIZE  12
 
 /* timeout in frames waiting for frame done */
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 /* case 03134585
  * sometimes, it is delayed for hundreds miliseconds
  * to call sde_crtc_frame_event_work(), by scheduling.

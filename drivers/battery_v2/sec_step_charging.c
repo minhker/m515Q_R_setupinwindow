@@ -622,11 +622,13 @@ void sec_bat_set_aging_info_step_charging(struct sec_battery_info *battery)
 #endif
 
 #if defined(CONFIG_STEP_CHARGING) && !defined(CONFIG_NEW_STEP_CHARGING_CONCEPT)
-	dev_info(battery->dev,
-		 "%s: float_v(%d), step_conditon(%d)\n",
-		 __func__,
-		 battery->pdata->step_charging_float_voltage[battery->step_charging_step-1],
-		 battery->pdata->step_charging_condition[0]);
+	if (battery->step_charging_type) {
+		dev_info(battery->dev,
+			"%s: float_v(%d), step_condition(%d)\n",
+			__func__,
+			battery->pdata->step_charging_float_voltage[battery->step_charging_step-1],
+			battery->pdata->step_charging_condition[0]);
+	}
 #endif
 }
 #endif

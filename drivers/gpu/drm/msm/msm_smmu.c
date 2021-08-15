@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -29,7 +29,7 @@
 #include "msm_mmu.h"
 #include "sde_dbg.h"
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 #include "ss_dsi_panel_common.h"
 #endif
 
@@ -228,7 +228,7 @@ static int msm_smmu_map_dma_buf(struct msm_mmu *mmu, struct sg_table *sgt,
 	struct msm_smmu_client *client = msm_smmu_to_client(smmu);
 	unsigned long attrs = 0x0;
 	int ret;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	int retry_cnt;
 #endif
 
@@ -244,8 +244,8 @@ static int msm_smmu_map_dma_buf(struct msm_mmu *mmu, struct sg_table *sgt,
 	if (!(flags & MSM_BO_EXTBUF)) {
 		ret = dma_map_sg_attrs(client->dev, sgt->sgl, sgt->nents, dir,
 				attrs);
-		
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 		if (!ret && !in_interrupt()) {
 			for (retry_cnt = 0; retry_cnt < 62 ; retry_cnt++) {
 				/* To wait free page by memory reclaim*/
@@ -276,6 +276,9 @@ static int msm_smmu_map_dma_buf(struct msm_mmu *mmu, struct sg_table *sgt,
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 	if (sec_debug_is_enabled() && sgt && sgt->sgl)
 		ss_smmu_debug_map(SMMU_RT_DISPLAY_DEBUG, 0, NULL, sgt);
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	if (sec_debug_is_enabled() && sgt && sgt->sgl)
+		ss_smmu_debug_map(SMMU_RT_DISPLAY_DEBUG, sgt);
 #endif
 
 	return 0;
@@ -302,6 +305,9 @@ static void msm_smmu_unmap_dma_buf(struct msm_mmu *mmu, struct sg_table *sgt,
 	}
 
 #if defined(CONFIG_DISPLAY_SAMSUNG)
+	if (sec_debug_is_enabled() && sgt && sgt->sgl)
+		ss_smmu_debug_unmap(SMMU_RT_DISPLAY_DEBUG, sgt);
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	if (sec_debug_is_enabled() && sgt && sgt->sgl)
 		ss_smmu_debug_unmap(SMMU_RT_DISPLAY_DEBUG, sgt);
 #endif
@@ -484,7 +490,10 @@ static int msm_smmu_fault_handler(struct iommu_domain *domain,
 	DRM_ERROR("SMMU device:%s", client->dev ? client->dev->kobj.name : "");
 
 	/* generate dump, but no panic */
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_smmu_debug_log();
+#endif
 	SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus", "panic"); // case 03250922
 #else
 	SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus");
@@ -537,7 +546,7 @@ static int _msm_smmu_create_mapping(struct msm_smmu_client *client,
 				sizeof(*client->dev->dma_parms), GFP_KERNEL);
 
 	dma_set_max_seg_size(client->dev, DMA_BIT_MASK(32));
-	dma_set_seg_boundary(client->dev, DMA_BIT_MASK(64));
+	dma_set_seg_boundary(client->dev, (unsigned long)DMA_BIT_MASK(64));
 
 	iommu_set_fault_handler(client->mmu_mapping->domain,
 			msm_smmu_fault_handler, (void *)client);

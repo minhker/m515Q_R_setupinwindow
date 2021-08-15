@@ -29,9 +29,12 @@ static DEFINE_SPINLOCK(gpiomux_lock);
 /******************************************************************************
  * Define value in accordance with the specification of each BB vendor.
  ******************************************************************************/
-#ifdef CONFIG_ARCH_SEC_SM7150
+#if defined(CONFIG_ARCH_SEC_SM7150)
 #define AP_MAX_GPIO_NUM   113
 #define AP_GPIO_COUNT     114
+#elif defined(CONFIG_ARCH_ATOLL)
+#define AP_MAX_GPIO_NUM   118
+#define AP_GPIO_COUNT     119
 #else
 #define AP_MAX_GPIO_NUM   122
 #define AP_GPIO_COUNT     123

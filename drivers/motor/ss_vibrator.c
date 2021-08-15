@@ -314,63 +314,35 @@ static void set_vibrator(struct ss_vib *vib)
 	if (vib->state) {
 		wake_lock(&vib_wake_lock);
 		pm_qos_update_request(&pm_qos_req, PM_QOS_NONIDLE_VALUE);
-#if 0
 #if defined(CONFIG_SLPI_MOTOR)
 		setSensorCallback(true, vib->timevalue);
 #endif
-		max778xx_haptic_en(vib, true);
 
-		if (IS_ERR(vib->pinctrl)) {
-			pr_debug("[VIB]: pinctrl error(%d)\n", IS_ERR(vib->pinctrl));
-		} else if (IS_ERR(vib->pin_active)) {
-			pr_debug("[VIB]: pin_active error(%d)\n", IS_ERR(vib->pin_active));
-		} else {
-			ret = pinctrl_select_state(vib->pinctrl, vib->pin_active);
-			if (ret)
-				pr_err("[VIB]: can not change pin_active\n");
-		}
-#endif
 #if defined(CONFIG_BOOST_POWER_SHARE)
 		boost_power_on(vib, BOOST_REQUESTER_MOTOR, 1);
 #else
 		if (vib->power_onoff)
 			vib->power_onoff(1);
 #endif
-//		if (vib->flag_en_gpio)
-//			gpio_set_value(vib->vib_en_gpio, VIBRATION_ON);
-//		gpio_set_value(vib->vib_pwm_gpio, VIBRATION_ON);
+		if (vib->flag_en_gpio)
+			gpio_set_value(vib->vib_en_gpio, VIBRATION_ON);
+
 		hrtimer_start(&vib->vib_timer, ktime_set(vib->timevalue / 1000,
 			(vib->timevalue % 1000) * 1000000), HRTIMER_MODE_REL);
 	} else {
-#if 0
-		if (IS_ERR(vib->pinctrl)) {
-			pr_debug("[VIB]: pinctrl error(%d)\n", IS_ERR(vib->pinctrl));
-		} else if (IS_ERR(vib->pin_suspend)) {
-			pr_debug("[VIB]: pin_suspend error(%d)\n", IS_ERR(vib->pin_suspend));
-		} else {
-			ret = pinctrl_select_state(vib->pinctrl, vib->pin_suspend);
-			if (ret)
-				pr_err("[VIB]: can not change pin_suspend\n");
-		}
-
-		gpio_set_value(vib->vib_pwm_gpio, VIBRATION_OFF);
-
 		if (vib->flag_en_gpio)
 			gpio_set_value(vib->vib_en_gpio, VIBRATION_OFF);
-#endif
+
 #if defined(CONFIG_BOOST_POWER_SHARE)
 		boost_power_on(vib, BOOST_REQUESTER_MOTOR, 0);
 #else
 		if (vib->power_onoff)
 			vib->power_onoff(0);
 #endif
-#if 0
-		max778xx_haptic_en(vib, false);
-
 #if defined(CONFIG_SLPI_MOTOR)
 		setSensorCallback(false, vib->timevalue);
 #endif
-#endif
+
 		//PM_QOS_DEFAULT_VALUE
 		wake_unlock(&vib_wake_lock);
 		pm_qos_update_request(&pm_qos_req, PM_QOS_DEFAULT_VALUE);
@@ -509,8 +481,10 @@ static int vibrator_parse_dt(struct ss_vib *vib)
 	if (!gpio_is_valid(vib->vib_en_gpio)) {
 		vib->flag_en_gpio = 0;
 		pr_info("%s:%d, en gpio not specified\n", __func__, __LINE__);
-	} else
+	} else {
 		vib->flag_en_gpio = 1;
+		gpio_direction_output(vib->vib_en_gpio, 0);
+	}
 
 	vib->vib_power_gpio = of_get_named_gpio(np, "samsung,vib_power", 0);
 	if (!gpio_is_valid(vib->vib_power_gpio))
@@ -633,14 +607,6 @@ static int vibrator_parse_dt(struct ss_vib *vib)
 			rc = 0;
 		}
 
-	}
-
-	vib->pwm_dev = devm_of_pwm_get(vib->dev, np, NULL);
-	if (IS_ERR(vib->pwm_dev)) {
-		rc = PTR_ERR(vib->pwm_dev);
-		if (rc != -EPROBE_DEFER)
-			dev_err(vib->dev, "Get pwm device for sliding motor failed, rc=%d\n", rc);
-		return rc;
 	}
 
 	return rc;
@@ -1080,8 +1046,6 @@ static int ss_vibrator_probe(struct platform_device *pdev)
 {
 	struct ss_vib *vib;
 	int rc = 0;
-//	struct pwm_state pstate;
-//	int duty, period;
 
 	pr_info("[VIB]: %s\n", __func__);
 
@@ -1214,25 +1178,7 @@ static int ss_vibrator_probe(struct platform_device *pdev)
 				pr_err("[VIB]: can not change pin_suspend\n");
 		}
 	}
-#if 0
-	vib->power_onoff(1);
 
-	pr_info("[VIB] enable pwm\n");
-
-	period = 1000000;
-	duty = 800000;
-	pwm_get_state(vib->pwm_dev, &pstate);
-	pstate.enabled = true;
-	pstate.period = period;
-	pstate.duty_cycle = duty;
-	pstate.output_type = PWM_OUTPUT_FIXED;
-	/* Use default pattern in PWM device */
-	pstate.output_pattern = NULL;
-
-	rc = pwm_apply_state(vib->pwm_dev, &pstate);
-	if (rc< 0)
-		dev_err(vib->dev, "Apply PWM state for sliding motor failed, rc=%d\n", rc);
-#endif
 	return 0;
 err_read_vib:
 	iounmap(virt_mmss_gp1_base);

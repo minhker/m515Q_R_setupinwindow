@@ -162,6 +162,10 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_FLED_BOOST_ON,
 	POWER_SUPPLY_EXT_PROP_FLED_BOOST_OFF,
 #endif
+/* In CCIC code, below properties coded outside config */
+	POWER_SUPPLY_EXT_PROP_OTG_VOLTAGE,
+	POWER_SUPPLY_EXT_PROP_SELECT_PDO_9V,
+	POWER_SUPPLY_EXT_PROP_CHARGE_UNO_CONTROL,
 };
 
 enum rx_device_type {
@@ -1551,4 +1555,7 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 #define is_pd_wire_type(cable_type) ( \
 	cable_type == SEC_BATTERY_CABLE_PDIC)
 #endif
+
+#define is_pd_fpdo_wire_type(cable_type) ( \
+	cable_type == SEC_BATTERY_CABLE_PDIC)
 #endif /* __SEC_CHARGING_COMMON_H */

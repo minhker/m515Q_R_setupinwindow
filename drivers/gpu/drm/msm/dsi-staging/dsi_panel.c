@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,7 @@
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 #include "ss_dsi_panel_common.h"
 #endif
 
@@ -355,109 +355,72 @@ int dsi_panel_trigger_esd_attack(struct dsi_panel *panel)
 	pr_err("failed to pull down gpio\n");
 	return -EINVAL;
 }
-
 #if defined(CONFIG_DISPLAY_SAMSUNG)
-int dsi_panel_reset_prepare(struct dsi_panel *panel){
+int dsi_panel_reset(struct dsi_panel *panel)
+#else
+static int dsi_panel_reset(struct dsi_panel *panel)
+#endif
+{
 	int rc = 0;
 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 	int i;
+
+	if (gpio_is_valid(panel->reset_config.disp_en_gpio)) {
+		rc = gpio_direction_output(panel->reset_config.disp_en_gpio, 1);
+		if (rc) {
+			pr_err("unable to set dir for disp gpio rc=%d\n", rc);
+			goto exit;
+		}
+	}
 
 	if (r_config->count) {
 		rc = gpio_direction_output(r_config->reset_gpio,
 			r_config->sequence[0].level);
 		if (rc) {
 			pr_err("unable to set dir for rst gpio rc=%d\n", rc);
-			return rc;
+			goto exit;
 		}
 	}
+
 	for (i = 0; i < r_config->count; i++) {
-		gpio_set_value(r_config->reset_gpio,  r_config->sequence[i].level);
+		gpio_set_value(r_config->reset_gpio,
+			       r_config->sequence[i].level);
+
 
 		if (r_config->sequence[i].sleep_ms)
 			usleep_range(r_config->sequence[i].sleep_ms * 1000,
 				(r_config->sequence[i].sleep_ms * 1000) + 100);
 	}
+
+	if (gpio_is_valid(panel->bl_config.en_gpio)) {
+		rc = gpio_direction_output(panel->bl_config.en_gpio, 1);
+		if (rc)
+			pr_err("unable to set dir for bklt gpio rc=%d\n", rc);
+	}
+
+	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio)) {
+		bool out = true;
+
+		if ((panel->reset_config.mode_sel_state == MODE_SEL_DUAL_PORT)
+				|| (panel->reset_config.mode_sel_state
+					== MODE_GPIO_LOW))
+			out = false;
+		else if ((panel->reset_config.mode_sel_state
+				== MODE_SEL_SINGLE_PORT) ||
+				(panel->reset_config.mode_sel_state
+				 == MODE_GPIO_HIGH))
+			out = true;
+
+		rc = gpio_direction_output(
+			panel->reset_config.lcd_mode_sel_gpio, out);
+		if (rc)
+			pr_err("unable to set dir for mode gpio rc=%d\n", rc);
+	}
+exit:
 	return rc;
 }
-#endif
 
-static int dsi_panel_reset(struct dsi_panel *panel)
-{
-    int rc = 0;
-#if !defined(CONFIG_DISPLAY_SAMSUNG)
-    struct dsi_panel_reset_config *r_config = &panel->reset_config;
-    int i;
-#endif
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-    struct samsung_display_driver_data *vdd = panel->panel_private;
-#endif
-
-    if (gpio_is_valid(panel->reset_config.disp_en_gpio)) {
-        rc = gpio_direction_output(panel->reset_config.disp_en_gpio, 1);
-        if (rc) {
-            pr_err("unable to set dir for disp gpio rc=%d\n", rc);
-            goto exit;
-        }
-    }
-#if !defined(CONFIG_DISPLAY_SAMSUNG)
-    if (r_config->count) {
-        rc = gpio_direction_output(r_config->reset_gpio,
-            r_config->sequence[0].level);
-        if (rc) {
-            pr_err("unable to set dir for rst gpio rc=%d\n", rc);
-            goto exit;
-        }
-    }
-
-    for (i = 0; i < r_config->count; i++) {
-        gpio_set_value(r_config->reset_gpio,
-                   r_config->sequence[i].level);
-
-
-        if (r_config->sequence[i].sleep_ms)
-            usleep_range(r_config->sequence[i].sleep_ms * 1000,
-                (r_config->sequence[i].sleep_ms * 1000) + 100);
-    }
-#endif
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-    if (!vdd->dtsi_data.samsung_reset_after_dsi_on){
-        rc = dsi_panel_reset_prepare(panel);
-        if (rc) {
-            pr_err("panel reset failed, rc=%d\n", rc);
-        }
-    }
-#endif
-
-    if (gpio_is_valid(panel->bl_config.en_gpio)) {
-        rc = gpio_direction_output(panel->bl_config.en_gpio, 1);
-        if (rc)
-            pr_err("unable to set dir for bklt gpio rc=%d\n", rc);
-    }
-
-    if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio)) {
-        bool out = true;
-
-        if ((panel->reset_config.mode_sel_state == MODE_SEL_DUAL_PORT)
-                || (panel->reset_config.mode_sel_state
-                    == MODE_GPIO_LOW))
-            out = false;
-        else if ((panel->reset_config.mode_sel_state
-                == MODE_SEL_SINGLE_PORT) ||
-                (panel->reset_config.mode_sel_state
-                 == MODE_GPIO_HIGH))
-            out = true;
-
-        rc = gpio_direction_output(
-            panel->reset_config.lcd_mode_sel_gpio, out);
-        if (rc)
-            pr_err("unable to set dir for mode gpio rc=%d\n", rc);
-    }
-exit:
-    return rc;
-}
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 #else
 static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
@@ -482,7 +445,7 @@ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 	return rc;
 }
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG)  || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 int dsi_panel_power_on(struct dsi_panel *panel)
 #else
 static int dsi_panel_power_on(struct dsi_panel *panel)
@@ -490,17 +453,28 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	struct samsung_display_driver_data *vdd = panel->panel_private;
 
 	/* Make not to turn on the panel power when ub_con_det.gpio is high (ub is not connected) */
 	if (unlikely(vdd->is_factory_mode)) {
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+		if (gpio_is_valid(vdd->ub_con_det.gpio))
+			LCD_INFO("ub_con_det.gpio = %d\n", gpio_get_value(vdd->ub_con_det.gpio));
+
+		vdd->ub_con_det.current_wakeup_context_gpio_status = gpio_get_value(vdd->ub_con_det.gpio);
+		if (vdd->ub_con_det.current_wakeup_context_gpio_status) {
+			LCD_ERR("Do not panel power on..\n");
+			return 0;
+		}
+#else
 		if (gpio_is_valid(vdd->ub_con_det.gpio))
 			pr_info("ub_con_det.gpio = %d\n", gpio_get_value(vdd->ub_con_det.gpio));
 		if (gpio_is_valid(vdd->ub_con_det.gpio) && gpio_get_value(vdd->ub_con_det.gpio)) {
 			LCD_ERR("Do not panel power on..\n");
 			return 0;
 		}
+#endif
 	}
 	if (!ss_panel_attach_get(panel->panel_private)) {
 		pr_info("PBA booting, skip to power on panel\n");
@@ -528,6 +502,9 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		LCD_ERR("no samsung_bl_ic_en function\n");
 	else
 		vdd->panel_func.samsung_bl_ic_en(true);
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	/* samsung specific power control */
+	ss_panel_power_ctrl(vdd, true);
 #endif
 
 	rc = dsi_panel_set_pinctrl_state(panel, true);
@@ -535,12 +512,17 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		pr_err("[%s] failed to set pinctrl, rc=%d\n", panel->name, rc);
 		goto error_disable_vregs;
 	}
-
-	rc = dsi_panel_reset(panel);
-	if (rc) {
-		pr_err("[%s] failed to reset panel, rc=%d\n", panel->name, rc);
-		goto error_disable_gpio;
+	if(!vdd->dtsi_data.samsung_reset_after_dsi_on)
+	{
+		rc = dsi_panel_reset(panel);
+		if (rc) {
+			pr_err("[%s] failed to reset panel, rc=%d\n", panel->name, rc);
+			goto error_disable_gpio;
+		}
 	}
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	vdd->reset_time_64 = ktime_to_ms(ktime_get());
+#endif
 
 	goto exit;
 
@@ -559,23 +541,8 @@ error_disable_vregs:
 exit:
 	return rc;
 }
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-void dsi_panel_pre_reset_unprepare(struct dsi_panel *panel)
-{
 
-	if (!ss_panel_attach_get(panel->panel_private)) {
-		LCD_INFO("PBA booting, skip to power off panel\n");
-		return ;
-	}
-
-	if (gpio_is_valid(panel->reset_config.reset_gpio))
-		gpio_set_value(panel->reset_config.reset_gpio, 0);
-
-	return ;
-}
-#endif
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 int dsi_panel_power_off(struct dsi_panel *panel)
 #else
 static int dsi_panel_power_off(struct dsi_panel *panel)
@@ -583,22 +550,34 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	struct samsung_display_driver_data *vdd = panel->panel_private;
 
 	if (!ss_panel_attach_get(panel->panel_private)) {
 		LCD_INFO("PBA booting, skip to power off panel\n");
 		return 0;
 	}
-
-	if (vdd->dtsi_data.samsung_dsi_off_reset_delay && !vdd->dtsi_data.samsung_reset_before_dsi_off) {
-		usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
-				vdd->dtsi_data.samsung_dsi_off_reset_delay);
-	}
 #endif
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	if (!vdd->dtsi_data.samsung_reset_before_dsi_off) {
+		if (vdd->dtsi_data.samsung_dsi_off_reset_delay) {
+			usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
+					vdd->dtsi_data.samsung_dsi_off_reset_delay);
+		}
+		if (gpio_is_valid(panel->reset_config.reset_gpio))
+			gpio_set_value(panel->reset_config.reset_gpio, 0);
+	}
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	if (vdd->dtsi_data.samsung_dsi_off_reset_delay)
+		usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
+			vdd->dtsi_data.samsung_dsi_off_reset_delay);
 
-	if (gpio_is_valid(panel->reset_config.reset_gpio) && !vdd->dtsi_data.samsung_reset_before_dsi_off)
+	if (gpio_is_valid(panel->reset_config.reset_gpio))
 		gpio_set_value(panel->reset_config.reset_gpio, 0);
+#else
+	if (gpio_is_valid(panel->reset_config.reset_gpio))
+		gpio_set_value(panel->reset_config.reset_gpio, 0);
+#endif
 
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
@@ -618,10 +597,6 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		pr_err("[%s] failed set pinctrl state, rc=%d\n", panel->name,
 		       rc);
 	}
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	if(vdd->dtsi_data.samsung_panel_poweroff_delay)
-		msleep(1);
-#endif
 
 	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
 	if (rc)
@@ -632,6 +607,9 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 				enum dsi_cmd_set_type type)
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
+				int type)
 #else
 static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 				enum dsi_cmd_set_type type)
@@ -642,17 +620,22 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 	struct dsi_cmd_desc *cmds;
 	u32 count;
 	enum dsi_cmd_set_state state;
-#if !defined(CONFIG_DISPLAY_SAMSUNG)
+#if !(defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO))
 	struct dsi_display_mode *mode;
 #endif
 	const struct mipi_dsi_host_ops *ops = panel->host->ops;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	struct samsung_display_driver_data *vdd = panel->panel_private;
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	struct samsung_display_driver_data *vdd;
 	struct dsi_panel_cmd_set *set;
 	struct dsi_display *display = container_of(panel->host, struct dsi_display, host);
 	size_t tot_tx_len = 0;
 	int retry = 5;
+
+	/* Null check before use*/
+	if (!panel->panel_private)
+		return -EINVAL;
+	vdd = panel->panel_private;
 
 	/* ss_get_cmds() gets proper QCT cmds or SS cmds for panel revision. */
 	set = ss_get_cmds(vdd, type);
@@ -687,8 +670,7 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		state = mode->priv_info->cmd_sets[type].state;
 #endif
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	if (cmds && (display->ctrl[cmds->msg.ctrl].ctrl->secure_mode)) {
 		for (i = 0 ; i < count ; i++) {
 			if (cmds->msg.tx_len > DSI_CTRL_MAX_CMD_FIFO_STORE_SIZE) {
@@ -726,6 +708,38 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 			tot_tx_len = 0;
 		} else
 			cmds->last_command = false;
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+		/* set last_command if total size is over than MAX DSI FIFO SIZE */
+		cmds->msg.flags &= ~(MIPI_DSI_MSG_LASTCOMMAND);
+
+		if (tot_tx_len == 0)
+			tot_tx_len = ALIGN((cmds->msg.tx_len + 4), 4);
+
+		if (i < count - 1)
+			tot_tx_len += ALIGN(((cmds + 1)->msg.tx_len + 4), 4);
+
+		if ((tot_tx_len > DSI_CTRL_MAX_CMD_FET_MEMORY_SIZE) || (i == count-1) || (cmds->post_wait_ms) ||
+				(cmds->last_command == true)) {
+			pr_debug("tot %zd is over than max || last cmd set, set last_command",
+					tot_tx_len);
+			cmds->last_command = true;
+			tot_tx_len = 0;
+		} else
+			cmds->last_command = false;
+
+		if (vdd->not_support_single_tx) /* Some DDI does not support single tx */
+			cmds->last_command = true;
+
+		if (vdd->dtsi_data.samsung_cmds_unicast)
+			cmds->msg.flags |= MIPI_DSI_MSG_UNICAST;
+
+		/*
+		*	Single dsi display uses unicast by default.
+		*	Force Broadcast(dual dsi) dispaly use master only read operation,
+		*	even if samsung_cmds_unicast is not set.
+		*/
+		if (cmds->msg.rx_len && cmds->msg.rx_buf)
+			cmds->msg.flags |= MIPI_DSI_MSG_UNICAST;
 #endif
 
 		if (state == DSI_CMD_SET_STATE_LP)
@@ -736,31 +750,33 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		else
 			cmds->msg.flags &= ~MIPI_DSI_MSG_LASTCOMMAND;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 		while (retry-- >= 0) {
 #endif
 			len = ops->transfer(panel->host, &cmds->msg);
 			if (len < 0) {
 				rc = len;
 				pr_err("failed to set cmds(%d), rc=%d\n", type, rc);
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 				pr_err("transfer retry!(%d)\n", retry);
 				continue;
 #endif
 				goto error;
 			}
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 			else {
 				retry = 5;
 				break;
 			}
 		}
 
-		if (retry < 0)
-		{
-			SDE_DBG_DUMP("sde", "dsi0_ctrl", "dsi0_phy", "dsi1_ctrl",
-				"dsi1_phy", "vbif", "dbg_bus",
-				"vbif_dbg_bus", "panic");
+		if (retry < 0) {
+			if (!vdd->panel_dead)
+				SDE_DBG_DUMP("sde", "dsi0_ctrl", "dsi0_phy", "dsi1_ctrl",
+					"dsi1_phy", "vbif", "dbg_bus",
+					"vbif_dbg_bus", "panic");
+			else
+				pr_err("Skip dump register in ESD\n");
 		}
 #endif
 
@@ -770,7 +786,7 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		cmds++;
 	}
 error:
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	mutex_unlock(&vdd->cmd_lock);
 #endif
 	return rc;
@@ -852,7 +868,7 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 	dsi = &panel->mipi_device;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	rc = ss_brightness_dcs(panel->panel_private, bl_lvl, BACKLIGHT_NORMAL);
 	if (rc < 0)
 		LCD_INFO("failed to update dcs backlight:%d\n", bl_lvl);
@@ -891,8 +907,8 @@ static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
 
 	rc = pwm_config(bl->pwm_bl, duty, period_ns);
 	if (rc) {
-		pr_err("[%s] failed to change pwm config, rc=\n", panel->name,
-			rc);
+		pr_err("[%s] failed to change pwm config, rc=%i\n",
+		       panel->name, rc);
 		goto error;
 	}
 
@@ -905,8 +921,8 @@ static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
 	if (!bl->pwm_enabled) {
 		rc = pwm_enable(bl->pwm_bl);
 		if (rc) {
-			pr_err("[%s] failed to enable pwm, rc=\n", panel->name,
-				rc);
+			pr_err("[%s] failed to enable pwm, rc=%i\n",
+			       panel->name, rc);
 			goto error;
 		}
 
@@ -1182,6 +1198,12 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 		       rc);
 		goto error;
 	}
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	mode->sot_hs_mode = utils->read_bool(utils->data, "samsung,mdss-dsi-sot-hs-mode");
+	mode->phs_mode = utils->read_bool(utils->data, "samsung,mdss-dsi-phs-mode");
+#endif
+
 	pr_debug("panel vert active:%d front_portch:%d back_porch:%d pulse_width:%d\n",
 		mode->v_active, mode->v_front_porch, mode->v_back_porch,
 		mode->v_sync_width);
@@ -1439,6 +1461,9 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 		pr_debug("[%s] t_clk_pre = %d\n", name, val);
 	}
 
+	host->t_clk_pre_extend = utils->read_bool(utils->data,
+						"qcom,mdss-dsi-t-clk-pre-extend");
+
 	host->ignore_rx_eot = utils->read_bool(utils->data,
 						"qcom,mdss-dsi-rx-eot-ignore");
 
@@ -1573,10 +1598,11 @@ static int dsi_panel_parse_qsync_caps(struct dsi_panel *panel,
 static int dsi_panel_parse_dyn_clk_caps(struct dsi_panel *panel)
 {
 	int rc = 0;
-	bool supported = false;
+	bool supported = false, skip_phy_timing_update = false;
 	struct dsi_dyn_clk_caps *dyn_clk_caps = &panel->dyn_clk_caps;
 	struct dsi_parser_utils *utils = &panel->utils;
 	const char *name = panel->name;
+	const char *type = NULL;
 
 	supported = utils->read_bool(utils->data, "qcom,dsi-dyn-clk-enable");
 
@@ -1607,8 +1633,34 @@ static int dsi_panel_parse_dyn_clk_caps(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
+	skip_phy_timing_update = utils->read_bool(utils->data,
+				"qcom,dsi-dyn-clk-skip-timing-update");
+	if (!skip_phy_timing_update)
+		dyn_clk_caps->skip_phy_timing_update = false;
+	else
+		dyn_clk_caps->skip_phy_timing_update = true;
+
 	dyn_clk_caps->dyn_clk_support = true;
 
+	type = utils->get_property(utils->data,
+				   "qcom,dsi-dyn-clk-type", NULL);
+	if (!type) {
+		dyn_clk_caps->type = DSI_DYN_CLK_TYPE_LEGACY;
+		dyn_clk_caps->maintain_const_fps = false;
+		return 0;
+	}
+
+	if (!strcmp(type, "constant-fps-adjust-hfp")) {
+		dyn_clk_caps->type = DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_HFP;
+		dyn_clk_caps->maintain_const_fps = true;
+	} else if (!strcmp(type, "constant-fps-adjust-vfp")) {
+		dyn_clk_caps->type = DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_VFP;
+		dyn_clk_caps->maintain_const_fps = true;
+	} else {
+		dyn_clk_caps->type = DSI_DYN_CLK_TYPE_LEGACY;
+		dyn_clk_caps->maintain_const_fps = false;
+	}
+	pr_debug("Dynamic clock type is %d\n", dyn_clk_caps->type);
 	return 0;
 }
 
@@ -1831,6 +1883,7 @@ static int dsi_panel_parse_panel_mode(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_parser_utils *utils = &panel->utils;
+	bool panel_mode_switch_enabled;
 	enum dsi_op_mode panel_mode;
 	const char *mode;
 
@@ -1849,7 +1902,12 @@ static int dsi_panel_parse_panel_mode(struct dsi_panel *panel)
 		goto error;
 	}
 
-	if (panel_mode == DSI_OP_VIDEO_MODE) {
+	panel_mode_switch_enabled = utils->read_bool(utils->data,
+			"qcom,mdss-dsi-panel-mode-switch");
+	pr_info("%s: panel operating mode switch feature %s\n", __func__,
+		(panel_mode_switch_enabled ? "enabled" : "disabled"));
+
+	if (panel_mode == DSI_OP_VIDEO_MODE || panel_mode_switch_enabled) {
 		rc = dsi_panel_parse_video_host_config(&panel->video_config,
 						       utils,
 						       panel->name);
@@ -1860,7 +1918,7 @@ static int dsi_panel_parse_panel_mode(struct dsi_panel *panel)
 		}
 	}
 
-	if (panel_mode == DSI_OP_CMD_MODE) {
+	if (panel_mode == DSI_OP_CMD_MODE || panel_mode_switch_enabled) {
 		rc = dsi_panel_parse_cmd_host_config(&panel->cmd_config,
 						     utils,
 						     panel->name);
@@ -1872,6 +1930,7 @@ static int dsi_panel_parse_panel_mode(struct dsi_panel *panel)
 	}
 
 	panel->panel_mode = panel_mode;
+	panel->panel_mode_switch_enabled = panel_mode_switch_enabled;
 error:
 	return rc;
 }
@@ -1928,7 +1987,6 @@ error:
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 char *cmd_set_prop_map[SS_DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-pre-on-command",
-	"qcom,mdss-fd-on-factory-command",
 	"qcom,mdss-dsi-on-command",
 	"qcom,mdss-dsi-post-panel-on-command",
 	"qcom,mdss-dsi-pre-off-command",
@@ -2207,6 +2265,8 @@ char *cmd_set_prop_map[SS_DSI_CMD_SET_MAX] = {
 	"samsung,fd_on_tx_cmds_revA",
 	"samsung,fd_off_tx_cmds_revA",
 
+	"samsung,mdss-fd-on-factory-command",
+
 	"TX_CMD_END not parsed from DTSI",
 
 	/* RX */
@@ -2357,6 +2417,10 @@ static int dsi_panel_create_cmd_packets(const char *data,
 			goto error_free_payloads;
 		}
 
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+		cmd[i].ss_txbuf = payload;
+#endif
+
 		for (j = 0; j < cmd[i].msg.tx_len; j++)
 			payload[j] = data[7 + j];
 
@@ -2425,8 +2489,10 @@ static int dsi_panel_parse_cmd_sets_sub(struct dsi_panel_cmd_set *cmd,
 	pr_info("type=%d, name=%s, length=%d\n", type,
 		cmd_set_prop_map[type], length);
 
+#if !defined(CONFIG_DISPLAY_SAMSUNG_LEGO) /* prevent log flood */
 	print_hex_dump_debug("", DUMP_PREFIX_NONE,
 		       8, 1, data, length, false);
+#endif
 
 	rc = dsi_panel_get_cmd_pkt_count(data, length, &packet_count);
 	if (rc) {
@@ -2488,6 +2554,91 @@ error:
 	return rc;
 
 }
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+int __ss_dsi_panel_parse_cmd_sets(struct dsi_panel_cmd_set *cmd,
+					int type, struct dsi_parser_utils *utils,
+					char (*ss_cmd_set_prop)[SS_CMD_PROP_STR_LEN])
+{
+	int rc = 0;
+	u32 length = 0;
+	const char *data;
+	u32 packet_count = 0;
+	int ss_cmd_type = type - SS_DSI_CMD_SET_START;
+
+	data = utils->get_property(utils->data, ss_cmd_set_prop[ss_cmd_type],
+			&length);
+	if (!data) {
+		pr_debug("%s commands not defined\n", ss_cmd_set_prop[ss_cmd_type]);
+		rc = -ENOTSUPP;
+		goto error;
+	}
+
+	pr_info("type=%d, name=%s, length=%d\n", type,
+		ss_cmd_set_prop[ss_cmd_type], length);
+
+#if !defined(CONFIG_DISPLAY_SAMSUNG_LEGO) /* prevent log flood */
+	print_hex_dump_debug("", DUMP_PREFIX_NONE,
+			   8, 1, data, length, false);
+#endif
+
+	rc = dsi_panel_get_cmd_pkt_count(data, length, &packet_count);
+	if (rc) {
+		pr_err("commands failed, rc=%d\n", rc);
+		goto error;
+	}
+	pr_debug("[%s] packet-count=%d, %d\n", ss_cmd_set_prop[ss_cmd_type],
+		packet_count, length);
+
+	rc = dsi_panel_alloc_cmd_packets(cmd, packet_count);
+	if (rc) {
+		pr_err("failed to allocate cmd packets, rc=%d\n", rc);
+		goto error;
+	}
+
+	rc = dsi_panel_create_cmd_packets(data, length, packet_count,
+					  cmd->cmds);
+	if (rc) {
+		pr_err("failed to create cmd packets, rc=%d\n", rc);
+		goto error_free_mem;
+	}
+
+	/* samsung commands are set HS mode as default
+	 * without cmd_set_state_map
+	 */
+	if (ss_is_read_cmd(cmd)) {
+		/* send mipi rx packets in LP mode to prevent SoT error.
+		 * case 03377897
+		 */
+		cmd->state = DSI_CMD_SET_STATE_LP;
+		/* if samsung,two_byte_gpara is true,
+		 * that means DDI uses two_byte_gpara
+		 * to figure it, check cmd length
+		 * 06 01 00 00 00 00 01 DA 01 00 : use 1byte gpara, length is 10
+		 * 06 01 00 00 00 00 01 DA 01 00 00 : use 2byte gpara, length is 11
+		*/
+		if (length == 10) {
+			cmd->cmds[0].msg.rx_len = data[length-2];
+			cmd->read_startoffset = data[length-1];
+		} else {
+			cmd->cmds[0].msg.rx_len = data[length-3];
+			cmd->read_startoffset =
+				(((data[length-2]) << 8) & 0xFF00) | data[length-1];
+		}
+	} else {
+		cmd->state = DSI_CMD_SET_STATE_HS;
+	}
+
+	return rc;
+error_free_mem:
+	kfree(cmd->cmds);
+	cmd->cmds = NULL;
+error:
+	return rc;
+
+}
+#endif  /* #if defined(CONFIG_DISPLAY_SAMSUNG)*/
+
 
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 /* ss_dsi_panel_parse_cmd_sets_sub:
@@ -2766,6 +2917,18 @@ static int dsi_panel_parse_power_cfg(struct dsi_panel *panel)
 	if (panel->host_config.ext_bridge_num)
 		return 0;
 
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	/* In this point, vdd->panel_attach_status has invalid data.
+	 * So, use panel name to verify PBA booting,
+	 * intead of ss_panel_attach_get().
+	 */
+	if (!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD") ||
+			!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD_DSI1")) {
+		LCD_INFO("PBA booting, skip to parse vreg\n");
+		goto error;
+	}
+#endif
+
 	if (!strcmp(panel->type, "primary"))
 		supply_name = "qcom,panel-supply-entries";
 	else
@@ -2788,6 +2951,17 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 	const char *data;
 	struct dsi_parser_utils *utils = &panel->utils;
 	char *reset_gpio_name, *mode_set_gpio_name;
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	/* In case of that fail to parse reset_gpio, it skips to parse rest gpios.
+	 * In result, rest gpios have gpio0 value, then it causes xpu vilation or
+	 * kernel panic due to access to gpio0, which is not allowed.
+	 * Initialize gpio values here to prevent above issue.
+	 */
+	panel->reset_config.reset_gpio = -ENOENT;
+	panel->reset_config.disp_en_gpio = -ENOENT;
+	panel->reset_config.lcd_mode_sel_gpio = -ENOENT;
+#endif
 
 	if (!strcmp(panel->type, "primary")) {
 		reset_gpio_name = "qcom,platform-reset-gpio";
@@ -2952,7 +3126,7 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.brightness_max_level = val;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	rc = utils->read_u32(utils->data, "qcom,mdss-brightness-default-level",
 		&val);
 	if (rc) {
@@ -3190,8 +3364,9 @@ static int dsi_panel_parse_phy_timing(struct dsi_display_mode *mode,
 	int rc = 0;
 	struct dsi_display_mode_priv_info *priv_info;
 	u64 h_period, v_period;
-	u32 refresh_rate = TICKS_IN_MICRO_SECOND;
+	u64 refresh_rate = TICKS_IN_MICRO_SECOND;
 	struct dsi_mode_info *timing = NULL;
+	u64 pixel_clk_khz;
 
 	if (!mode || !mode->priv_info)
 		return -EINVAL;
@@ -3226,7 +3401,9 @@ static int dsi_panel_parse_phy_timing(struct dsi_display_mode *mode,
 		refresh_rate = timing->refresh_rate;
 	}
 
-	mode->pixel_clk_khz = (h_period * v_period * refresh_rate) / 1000;
+	pixel_clk_khz = h_period * v_period * refresh_rate;
+	do_div(pixel_clk_khz, 1000);
+	mode->pixel_clk_khz = pixel_clk_khz;
 
 	return rc;
 }
@@ -3581,6 +3758,31 @@ static int dsi_panel_parse_partial_update_caps(struct dsi_display_mode *mode,
 	return rc;
 }
 
+static int dsi_panel_parse_panel_mode_caps(struct dsi_display_mode *mode,
+			struct dsi_parser_utils *utils)
+{
+	bool vid_mode_support, cmd_mode_support;
+
+	if (!mode || !mode->priv_info) {
+		pr_err("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	vid_mode_support = utils->read_bool(utils->data,
+				"qcom,mdss-dsi-video-mode");
+	cmd_mode_support = utils->read_bool(utils->data,
+				"qcom,mdss-dsi-cmd-mode");
+
+	if (cmd_mode_support)
+		mode->panel_mode = DSI_OP_CMD_MODE;
+	else if (vid_mode_support)
+		mode->panel_mode = DSI_OP_VIDEO_MODE;
+	else
+		return -EINVAL;
+
+	return 0;
+};
+
 static int dsi_panel_parse_dms_info(struct dsi_panel *panel)
 {
 	int dms_enabled;
@@ -3811,7 +4013,7 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 			esd_config->status_mode = ESD_MODE_SW_BTA;
 		} else if (!strcmp(string, "reg_read")) {
 			esd_config->status_mode = ESD_MODE_REG_READ;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 		} else if (!strcmp(string, "irq_check")) {
 			esd_config->status_mode = ESD_MODE_PANEL_IRQ;
 			pr_err("%s : irq_check!!\n", __func__);
@@ -3845,7 +4047,7 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 		esd_mode = "register_read";
 	} else if (panel->esd_config.status_mode == ESD_MODE_SW_BTA) {
 		esd_mode = "bta_trigger";
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	} else if (panel->esd_config.status_mode == ESD_MODE_PANEL_IRQ) {
 		esd_mode = "panel_irq";
 #endif
@@ -3866,8 +4068,10 @@ static void dsi_panel_update_util(struct dsi_panel *panel,
 				  struct device_node *parser_node)
 {
 	struct dsi_parser_utils *utils = &panel->utils;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	struct dsi_parser_utils *self_disp_utils = &panel->self_display_utils;
+	struct dsi_parser_utils *mafpc_utils = &panel->mafpc_utils;
+	struct dsi_parser_utils *test_mode_utils = &panel->test_mode_utils;
 #endif
 
 	if (parser_node) {
@@ -3885,10 +4089,16 @@ end:
 	utils->node = panel->panel_of_node;
 
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	*self_disp_utils = *dsi_parser_get_of_utils();
 	self_disp_utils->data = panel->self_display_of_node;
 	self_disp_utils->node = panel->self_display_of_node;
+	*mafpc_utils = *dsi_parser_get_of_utils();
+	mafpc_utils->data = panel->mafpc_of_node;
+	mafpc_utils->node = panel->mafpc_of_node;
+	*test_mode_utils = *dsi_parser_get_of_utils();
+	test_mode_utils->data = panel->test_mode_of_node;
+	test_mode_utils->node = panel->test_mode_of_node;
 #endif
 }
 
@@ -3902,9 +4112,11 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	struct dsi_parser_utils *utils;
 	const char *panel_physical_type;
 	int rc = 0;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	struct device_node *self_display_node = of_parse_phandle(of_node,
 					   "ss,self_display", 0);
+	struct device_node *mafpc_node = of_parse_phandle(of_node, "ss,mafpc", 0);
+	struct device_node *test_mode_node = of_parse_phandle(of_node, "ss,test_mode", 0);
 #endif
 
 	panel = kzalloc(sizeof(*panel), GFP_KERNEL);
@@ -3915,8 +4127,10 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	panel->parent = parent;
 	panel->type = type;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	panel->self_display_of_node = self_display_node;
+	panel->mafpc_of_node = mafpc_node;
+	panel->test_mode_of_node = test_mode_node;
 #endif
 
 	dsi_panel_update_util(panel, parser_node);
@@ -3954,7 +4168,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 
 	rc = dsi_panel_parse_qsync_caps(panel, of_node);
 	if (rc)
-		pr_err("failed to parse qsync features, rc=%d\n", rc);
+		pr_debug("failed to parse qsync features, rc=%d\n", rc);
 
 	/* allow qsync support only if DFPS is with VFP approach */
 	if ((panel->dfps_caps.dfps_support) &&
@@ -4064,18 +4278,6 @@ int dsi_panel_drv_init(struct dsi_panel *panel,
 
 	panel->host = host;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	/* In this point, vdd->panel_attach_status has invalid data.
-	 * So, use panel name to verify PBA booting,
-	 * intead of ss_panel_attach_get().
-	 */
-	if (!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD") ||
-			!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD_DSI1")) {
-		pr_info("PBA booting, skip to get vreg, gpios\n");
-		goto pba_booting;
-	}
-#endif
-
 	rc = dsi_panel_vreg_get(panel);
 	if (rc) {
 		pr_err("[%s] failed to get panel regulators, rc=%d\n",
@@ -4104,8 +4306,7 @@ int dsi_panel_drv_init(struct dsi_panel *panel,
 		goto error_gpio_release;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-pba_booting:
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_panel_init(panel);
 #endif
 	goto exit;
@@ -4168,7 +4369,9 @@ int dsi_panel_get_mode_count(struct dsi_panel *panel)
 {
 	const u32 SINGLE_MODE_SUPPORT = 1;
 	struct dsi_parser_utils *utils;
-	struct device_node *timings_np;
+	struct device_node *timings_np, *child_np;
+	int num_dfps_rates, num_bit_clks;
+	int num_video_modes = 0, num_cmd_modes = 0;
 	int count, rc = 0;
 
 	if (!panel) {
@@ -4179,15 +4382,6 @@ int dsi_panel_get_mode_count(struct dsi_panel *panel)
 	utils = &panel->utils;
 
 	panel->num_timing_nodes = 0;
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	if (!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD") ||
-			!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD_DSI1")) {
-		pr_info("%s: PBA booting, force to set num_timing_nodes 1\n", __func__);
-		panel->num_timing_nodes = 1;
-		return 0;
-	}
-#endif
 
 	timings_np = utils->get_child_by_name(utils->data,
 			"qcom,mdss-dsi-display-timings");
@@ -4205,12 +4399,48 @@ int dsi_panel_get_mode_count(struct dsi_panel *panel)
 		goto error;
 	}
 
-	/* No multiresolution support is available for video mode panels */
+	/* No multiresolution support is available for video mode panels.
+	 * Multi-mode is supported for video mode during POMS is enabled.
+	 */
 	if (panel->panel_mode != DSI_OP_CMD_MODE &&
-		!panel->host_config.ext_bridge_num)
+		!panel->host_config.ext_bridge_num &&
+		!panel->panel_mode_switch_enabled)
 		count = SINGLE_MODE_SUPPORT;
 
 	panel->num_timing_nodes = count;
+	dsi_for_each_child_node(timings_np, child_np) {
+		if (utils->read_bool(child_np, "qcom,mdss-dsi-video-mode"))
+			num_video_modes++;
+		else if (utils->read_bool(child_np,
+					"qcom,mdss-dsi-cmd-mode"))
+			num_cmd_modes++;
+		else if (panel->panel_mode == DSI_OP_VIDEO_MODE)
+			num_video_modes++;
+		else if (panel->panel_mode == DSI_OP_CMD_MODE)
+			num_cmd_modes++;
+	}
+
+	num_dfps_rates = !panel->dfps_caps.dfps_support ? 1 :
+					panel->dfps_caps.dfps_list_len;
+
+	num_bit_clks = !panel->dyn_clk_caps.dyn_clk_support ? 1 :
+					panel->dyn_clk_caps.bit_clk_list_len;
+
+	/*
+	 * Inflate num_of_modes by fps and bit clks in dfps
+	 * Single command mode for video mode panels supporting
+	 * panel operating mode switch.
+	 */
+
+	num_video_modes = num_video_modes * num_bit_clks * num_dfps_rates;
+
+	if ((panel->panel_mode == DSI_OP_VIDEO_MODE) &&
+			(panel->panel_mode_switch_enabled))
+		num_cmd_modes  = 1;
+	else
+		num_cmd_modes = num_cmd_modes * num_bit_clks;
+
+	panel->num_display_modes = num_video_modes + num_cmd_modes;
 
 error:
 	return rc;
@@ -4270,6 +4500,10 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 	int rc = 0, num_timings;
 	void *utils_data = NULL;
 
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	struct samsung_display_driver_data *vdd;
+#endif
+
 	if (!panel || !mode) {
 		pr_err("invalid params\n");
 		return -EINVAL;
@@ -4285,54 +4519,6 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 	}
 
 	prv_info = mode->priv_info;
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	if (!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD") ||
-			!strcmp(panel->name, "ss_dsi_panel_PBA_BOOTING_FHD_DSI1")) {
-		pr_info("PBA booting, skip DMS\n");
-
-		utils_data = utils->data;
-
-		rc = dsi_panel_parse_timing(&mode->timing, utils);
-		if (rc) {
-			pr_err("failed to parse panel timing, rc=%d\n", rc);
-			goto parse_fail;
-		}
-
-		rc = dsi_panel_parse_dsc_params(mode, utils);
-		if (rc) {
-			pr_err("failed to parse dsc params, rc=%d\n", rc);
-			goto parse_fail;
-		}
-
-		rc = dsi_panel_parse_topology(prv_info, utils,
-				topology_override);
-		if (rc) {
-			pr_err("failed to parse panel topology, rc=%d\n", rc);
-			goto parse_fail;
-		}
-
-		rc = dsi_panel_parse_cmd_sets(prv_info, utils);
-		if (rc) {
-			pr_err("failed to parse command sets, rc=%d\n", rc);
-			goto parse_fail;
-		}
-
-		rc = dsi_panel_parse_jitter_config(mode, utils);
-		if (rc)
-			pr_err(
-			"failed to parse panel jitter config, rc=%d\n", rc);
-
-		rc = dsi_panel_parse_phy_timing(mode, utils, panel->panel_mode);
-		if (rc) {
-			pr_err(
-			"failed to parse panel phy timings, rc=%d\n", rc);
-			goto parse_fail;
-		}
-
-		goto done;
-	}
-#endif
 
 	timings_np = utils->get_child_by_name(utils->data,
 		"qcom,mdss-dsi-display-timings");
@@ -4362,9 +4548,6 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 			pr_err("failed to parse panel timing, rc=%d\n", rc);
 			goto parse_fail;
 		}
-
-		if (panel->panel_mode == DSI_OP_VIDEO_MODE)
-			mode->priv_info->mdp_transfer_time_us = 0;
 
 		rc = dsi_panel_parse_dsc_params(mode, utils);
 		if (rc) {
@@ -4407,7 +4590,28 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 		 */
 		if (prv_info->dsc_enabled || prv_info->roi_caps.enabled)
 			prv_info->overlap_pixels = 0;
+
+		if (panel->panel_mode_switch_enabled) {
+			rc = dsi_panel_parse_panel_mode_caps(mode, utils);
+			if (rc) {
+				pr_err("PMS: failed to parse panel mode\n");
+				rc = 0;
+				mode->panel_mode = panel->panel_mode;
+			}
+		} else {
+			mode->panel_mode = panel->panel_mode;
+		}
+
+		if (mode->panel_mode == DSI_OP_VIDEO_MODE)
+			mode->priv_info->mdp_transfer_time_us = 0;
 	}
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	vdd = panel->panel_private;
+	vdd->num_of_intf = mode->priv_info->topology.num_intf;
+	LCD_INFO_ONCE("[DISPLAY_%d] vdd->num_of_intf = %d\n", vdd->ndx, vdd->num_of_intf);
+#endif
+
 	goto done;
 
 parse_fail:
@@ -4425,7 +4629,7 @@ int dsi_panel_get_host_cfg_for_mode(struct dsi_panel *panel,
 {
 	int rc = 0;
 	struct dsi_dyn_clk_caps *dyn_clk_caps = &panel->dyn_clk_caps;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	struct samsung_display_driver_data *vdd;
 #endif
 
@@ -4463,7 +4667,7 @@ int dsi_panel_get_host_cfg_for_mode(struct dsi_panel *panel,
 
 	config->esc_clk_rate_hz = 19200000;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	vdd = panel->panel_private;
 	if (vdd->dtsi_data.samsung_esc_clk_128M)
 		config->esc_clk_rate_hz = 12800000;
@@ -4552,7 +4756,7 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -4577,14 +4781,14 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
 		       panel->name, rc);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_panel_low_power_config(panel->panel_private, true);
 #endif
 
 exit:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -4600,7 +4804,7 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -4613,14 +4817,14 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP2 cmd, rc=%d\n",
 		       panel->name, rc);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_panel_low_power_config(panel->panel_private, true);
 #endif
 
 exit:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -4636,7 +4840,7 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -4657,14 +4861,14 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 		       panel->name, rc);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_panel_low_power_config(panel->panel_private, false);
 #endif
 
 exit:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -4680,7 +4884,8 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	LCD_INFO("++\n");
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -4714,7 +4919,7 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 error:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -4808,6 +5013,10 @@ int dsi_panel_send_qsync_on_dcs(struct dsi_panel *panel,
 		return -EINVAL;
 	}
 
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
+#endif
+
 	mutex_lock(&panel->panel_lock);
 
 	pr_debug("ctrl:%d qsync on\n", ctrl_idx);
@@ -4817,6 +5026,11 @@ int dsi_panel_send_qsync_on_dcs(struct dsi_panel *panel,
 		       panel->name, rc);
 
 	mutex_unlock(&panel->panel_lock);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
+#endif
+
 	return rc;
 }
 
@@ -4830,6 +5044,10 @@ int dsi_panel_send_qsync_off_dcs(struct dsi_panel *panel,
 		return -EINVAL;
 	}
 
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
+#endif
+
 	mutex_lock(&panel->panel_lock);
 
 	pr_debug("ctrl:%d qsync off\n", ctrl_idx);
@@ -4839,6 +5057,11 @@ int dsi_panel_send_qsync_off_dcs(struct dsi_panel *panel,
 		       panel->name, rc);
 
 	mutex_unlock(&panel->panel_lock);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
+#endif
+
 	return rc;
 }
 
@@ -4866,7 +5089,7 @@ int dsi_panel_send_roi_dcs(struct dsi_panel *panel, int ctrl_idx,
 	pr_debug("[%s] send roi x %d y %d w %d h %d\n", panel->name,
 			roi->x, roi->y, roi->w, roi->h);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -4879,12 +5102,103 @@ int dsi_panel_send_roi_dcs(struct dsi_panel *panel, int ctrl_idx,
 
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
 	dsi_panel_destroy_cmd_packets(set);
 	dsi_panel_dealloc_cmd_packets(set);
+
+	return rc;
+}
+
+int dsi_panel_pre_mode_switch_to_video(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_CMD_TO_VID_SWITCH);
+	if (rc)
+		pr_err("[%s] failed to send DSI_CMD_SET_CMD_TO_VID_SWITCH cmds, rc=%d\n",
+			panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+
+	return rc;
+}
+
+int dsi_panel_pre_mode_switch_to_cmd(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_VID_TO_CMD_SWITCH);
+	if (rc)
+		pr_err("[%s] failed to send DSI_CMD_SET_VID_TO_CMD_SWITCH cmds, rc=%d\n",
+			panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_mode_switch_to_cmd(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
+#endif
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_VID_TO_CMD_SWITCH);
+	if (rc)
+		pr_err("[%s] failed to send DSI_CMD_SET_POST_VID_TO_CMD_SWITCH cmds, rc=%d\n",
+			panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
+#endif
+
+	return rc;
+}
+
+int dsi_panel_mode_switch_to_vid(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
+#endif
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_CMD_TO_VID_SWITCH);
+	if (rc)
+		pr_err("[%s] failed to send DSI_CMD_SET_POST_CMD_TO_VID_SWITCH cmds, rc=%d\n",
+			panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
+#endif
 
 	return rc;
 }
@@ -4898,7 +5212,37 @@ int dsi_panel_switch(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	if (panel->panel_private) {
+		struct samsung_display_driver_data *vdd = panel->panel_private;
+
+		if (vdd->vrr.support_vrr_based_bl) {
+			/* Sometimes, GFX HAL sends DMS that inlcudes multi resolution and VRR,
+			 * at one DMS commands. So, always handler DMS here.
+			 */
+			ss_panel_dms_switch(vdd);
+			return 0;
+		}
+
+		/* In QCT original VRR mode, below variables is meaningless..
+		 * But, to keep latest information for debugging,
+		 * update current vrr variables.
+		 */
+		vdd->vrr.cur_refresh_rate = vdd->vrr.adjusted_refresh_rate;
+		vdd->vrr.cur_sot_hs_mode = vdd->vrr.adjusted_sot_hs_mode;
+		vdd->vrr.cur_phs_mode = vdd->vrr.adjusted_phs_mode;
+		vdd->vrr.cur_h_active = vdd->vrr.adjusted_h_active;
+		vdd->vrr.cur_v_active = vdd->vrr.adjusted_v_active;
+
+		/* Do we have to change param only when the HS<->NORMAL be changed?
+		 * No problem to notify VRR change in panel not supporting VRR?
+		 */
+		ss_set_vrr_switch(vdd, true);
+	}
+
+#endif
+
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	LCD_INFO("DMS : send switch cmd\n");
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
@@ -4912,7 +5256,7 @@ int dsi_panel_switch(struct dsi_panel *panel)
 
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -4928,7 +5272,7 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -4941,7 +5285,7 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -4951,7 +5295,7 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	struct samsung_display_driver_data *vdd=NULL;
 #endif
 
@@ -4967,7 +5311,24 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	LCD_INFO("++\n");
 	ss_panel_on_pre(panel->panel_private);
 	if (unlikely(vdd->is_factory_mode))
-		ss_send_cmd(vdd, DSI_CMD_SET_FD_ON_FACTORY);
+		ss_send_cmd(vdd, TX_FD_ON_FACTORY);
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	LCD_ERR("++\n");
+
+	vdd = panel->panel_private;
+
+	/* delay between panel_reset and sleep_out */
+	ss_delay(vdd->dtsi_data.after_reset_delay, vdd->reset_time_64);
+
+	if (!ss_panel_on_pre(panel->panel_private)) {
+		mutex_unlock(&panel->panel_lock);
+		panel->panel_initialized = true;
+		return 0;
+	}
+
+	/* sleep out command is included in DSI_CMD_SET_ON */
+	vdd->sleep_out_time = ktime_get();
+	LCD_INFO("tx on_cmd +\n");
 #endif
 
 #if defined(CONFIG_DISPLAY_SAMSUNG)
@@ -4992,6 +5353,12 @@ int dsi_panel_enable(struct dsi_panel *panel)
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 	ss_panel_on_post(panel->panel_private);
 	LCD_INFO("--\n");
+#elif defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	LCD_INFO("tx on_cmd -\n");
+	vdd->tx_set_on_time = ktime_get();
+
+	ss_panel_on_post(panel->panel_private);
+	LCD_ERR("--\n");
 #endif
 
 	mutex_unlock(&panel->panel_lock);
@@ -5007,7 +5374,7 @@ int dsi_panel_post_enable(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -5022,7 +5389,7 @@ int dsi_panel_post_enable(struct dsi_panel *panel)
 error:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -5038,13 +5405,13 @@ int dsi_panel_pre_disable(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
 	mutex_lock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_panel_off_pre(panel->panel_private);
 #endif
 
@@ -5058,7 +5425,7 @@ int dsi_panel_pre_disable(struct dsi_panel *panel)
 error:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 
@@ -5074,12 +5441,19 @@ int dsi_panel_disable(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	LCD_INFO("++\n");
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
 	mutex_lock(&panel->panel_lock);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+	if (!ss_panel_attach_get(panel->panel_private)) {
+		LCD_INFO("PBA booting, skip to disable panel\n");
+		goto skip_cmd_tx;
+	}
+#endif
 
 	/* Avoid sending panel off commands when ESD recovery is underway */
 	if (!atomic_read(&panel->esd_recovery_pending)) {
@@ -5107,7 +5481,10 @@ int dsi_panel_disable(struct dsi_panel *panel)
 		}
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+skip_cmd_tx:
+#endif
 	ss_panel_off_post(panel->panel_private);
 #endif
 
@@ -5116,7 +5493,7 @@ int dsi_panel_disable(struct dsi_panel *panel)
 
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 	LCD_INFO("--\n");
 #endif
@@ -5133,7 +5510,7 @@ int dsi_panel_unprepare(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, true);
 #endif
 
@@ -5149,7 +5526,7 @@ int dsi_panel_unprepare(struct dsi_panel *panel)
 error:
 	mutex_unlock(&panel->panel_lock);
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ss_set_exclusive_tx_lock_from_qct(panel->panel_private, false);
 #endif
 

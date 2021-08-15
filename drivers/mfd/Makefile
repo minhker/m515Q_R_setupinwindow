@@ -248,3 +248,4 @@ obj-$(CONFIG_SEC_PM)	+= sec_ap_pmic.o
 
 obj-$(CONFIG_MFD_S2MU107)	+= s2mu107_core.o s2mu107_irq.o
 obj-$(CONFIG_MFD_S2MU106)	+= s2mu106_core.o s2mu106_irq.o
+obj-$(CONFIG_MFD_SM5714)	+= sm/sm5714/sm5714_core.o sm/sm5714/sm5714-irq.o

@@ -231,6 +231,16 @@ config CERTIFY_HALL
 
 	  If unsure, say N.
 
+config SUPPORT_HALL_ABNORMAL_TEST
+	bool "Enable HALL abnormal test"
+	depends on SEC_FACTORY
+	help
+	  Say Y here to support hall ic abnormal test.
+	  This enables a node to read how many hall ic is enabled,
+	  and send uevent when hall ic state has changed.
+
+	  If unsure, say N.
+
 config FOLDER_HALL
 	bool "FOLDER HALL"
 	default n

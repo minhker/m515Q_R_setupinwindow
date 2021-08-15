@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -90,6 +90,9 @@ struct dsi_dyn_clk_caps {
 	bool dyn_clk_support;
 	u32 *bit_clk_list;
 	u32 bit_clk_list_len;
+	bool skip_phy_timing_update;
+	enum dsi_dyn_clk_feature_type type;
+	bool maintain_const_fps;
 };
 
 struct dsi_pinctrl_info {
@@ -148,7 +151,7 @@ enum esd_check_status_mode {
 	ESD_MODE_PANEL_TE,
 	ESD_MODE_SW_SIM_SUCCESS,
 	ESD_MODE_SW_SIM_FAILURE,
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	ESD_MODE_PANEL_IRQ,
 #endif
 	ESD_MODE_MAX
@@ -182,6 +185,7 @@ struct dsi_panel {
 	struct dsi_video_engine_cfg video_config;
 	struct dsi_cmd_engine_cfg cmd_config;
 	enum dsi_op_mode panel_mode;
+	bool panel_mode_switch_enabled;
 
 	struct dsi_dfps_capabilities dfps_caps;
 	struct dsi_dyn_clk_caps dyn_clk_caps;
@@ -189,6 +193,7 @@ struct dsi_panel {
 
 	struct dsi_display_mode *cur_mode;
 	u32 num_timing_nodes;
+	u32 num_display_modes;
 
 	struct dsi_regulator_info power_info;
 	struct dsi_backlight_config bl_config;
@@ -216,10 +221,14 @@ struct dsi_panel {
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
+#if defined(CONFIG_DISPLAY_SAMSUNG) || defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
 	void *panel_private;
 	struct device_node *self_display_of_node;
 	struct dsi_parser_utils self_display_utils;
+	struct device_node *mafpc_of_node;
+	struct dsi_parser_utils mafpc_utils;
+	struct device_node *test_mode_of_node;
+	struct dsi_parser_utils test_mode_utils;
 #endif
 };
 
@@ -317,6 +326,14 @@ int dsi_panel_send_qsync_off_dcs(struct dsi_panel *panel,
 int dsi_panel_send_roi_dcs(struct dsi_panel *panel, int ctrl_idx,
 		struct dsi_rect *roi);
 
+int dsi_panel_pre_mode_switch_to_video(struct dsi_panel *panel);
+
+int dsi_panel_pre_mode_switch_to_cmd(struct dsi_panel *panel);
+
+int dsi_panel_mode_switch_to_cmd(struct dsi_panel *panel);
+
+int dsi_panel_mode_switch_to_vid(struct dsi_panel *panel);
+
 int dsi_panel_switch(struct dsi_panel *panel);
 
 int dsi_panel_post_switch(struct dsi_panel *panel);
@@ -340,8 +357,18 @@ int dsi_panel_power_off(struct dsi_panel *panel);
 int dsi_panel_tx_cmd_set(struct dsi_panel *panel, enum dsi_cmd_set_type type);
 int ss_dsi_panel_parse_cmd_sets(struct dsi_panel_cmd_set *cmd_sets,
 			struct dsi_panel *panel);
-void dsi_panel_pre_reset_unprepare(struct dsi_panel *panel);
-int dsi_panel_reset_prepare(struct dsi_panel *panel);
+int dsi_panel_reset(struct dsi_panel *panel);
 #endif
 
+#if defined(CONFIG_DISPLAY_SAMSUNG_LEGO)
+#define SS_CMD_PROP_STR_LEN (100)
+
+int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable);
+int dsi_panel_power_on(struct dsi_panel *panel);
+int dsi_panel_power_off(struct dsi_panel *panel);
+int dsi_panel_tx_cmd_set(struct dsi_panel *panel, int type);
+int __ss_dsi_panel_parse_cmd_sets(struct dsi_panel_cmd_set *cmd,
+					int type, struct dsi_parser_utils *utils,
+					char (*ss_cmd_set_prop)[SS_CMD_PROP_STR_LEN]);
+#endif
 #endif /* _DSI_PANEL_H_ */

@@ -73,13 +73,15 @@
 		qcom,mdss-pan-physical-width-dimension = <70>;
 		qcom,mdss-pan-physical-height-dimension = <155>;
 
-		samsung,mdss-dsi-off-reset-delay-us = <1000>;
+		/*samsung,mdss-dsi-off-reset-delay-us = <1000>;*/
 		qcom,mdss-dsi-reset-sequence = <0 10>, <1 10>;
 
 		samsung,mdss-reset-before-dsi-off; /*used for power off sequence Reset off-> (LP11->LP00) -> VCI(VPNL) off -> VDDI Off in panel SW83106 */
 		samsung,mdss-reset-after-dsi-on;   /*used for power on sequence VDDI On -> VCI(VPNL) On -> min 1ms -> (LP00->LP11)  -> Reset On in panel SW83106 */
-		qcom,mdss-dsi-lp11-init;
-		/*qcom,mdss-dsi-init-delay-us = <1000>;*/
+
+		/*samsung,mdss-dsi-poweroff-delay;*/
+		/*qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-init-delay-us = <1000>;*/
 
 		qcom,mdss-dsi-rx-eot-ignore;
 		qcom,mdss-dsi-tx-eot-append;
@@ -884,7 +886,7 @@
 
 		samsung,gamma_mode2_tx_cmds_revA=[
 			39 01 00 00 00 00 03 51 03 FF
-			15 01 00 00 00 00 02 4C 99  
+			15 01 00 00 00 00 02 4C 99
 		]; /* B5 1th para: TSET */
 
 		/* *************************************************************
@@ -967,7 +969,7 @@
 				05 01 00 00 64 00 01 11   // sleep out
 				39 01 00 00 00 00 02 B0 A1
 				39 01 00 00 00 00 0D B3 99 4C 00 2F 27 00 2F 27 28 00 06 14
-				//elvss temparature compensation 
+				//elvss temparature compensation
 				39 01 00 00 00 00 02 B0 A1
 				15 01 00 00 00 00 02 4C A8
 				39 01 00 00 00 00 12 C1 C9 68 60 0F 00 00 00 00 00 00 39 06 00 00 00 00 02

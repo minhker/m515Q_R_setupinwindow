@@ -1813,6 +1813,8 @@ static int s2mu106_fg_get_property(struct power_supply *psy,
 			val->intval = s2mu106_get_rawsoc(fuelgauge);
 		} else if (val->intval == SEC_FUELGAUGE_CAPACITY_TYPE_CAPACITY_POINT) {
 			val->intval = fuelgauge->raw_capacity % 10;
+		} else if (val->intval == SEC_FUELGAUGE_CAPACITY_TYPE_DYNAMIC_SCALE) {
+			val->intval = fuelgauge->raw_capacity;
 		} else {
 			val->intval = s2mu106_get_rawsoc(fuelgauge) / 10;
 

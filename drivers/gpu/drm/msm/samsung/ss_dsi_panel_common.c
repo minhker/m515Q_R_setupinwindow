@@ -2149,6 +2149,11 @@ int ss_panel_on_post(struct samsung_display_driver_data *vdd)
 	vdd->display_status_dsi.wait_actual_disp_on = true;
 	vdd->display_status_dsi.aod_delay = true;
 
+	if (ss_is_esd_check_enabled(vdd)) {
+		if (vdd->esd_recovery.esd_irq_enable)
+			vdd->esd_recovery.esd_irq_enable(true, true, (void *)vdd);
+	}
+
 	if (vdd->dyn_mipi_clk.is_support){
 		LCD_INFO("FFC Setting for Dynamic MIPI Clock\n");
 		ss_send_cmd(vdd, TX_FFC);
@@ -2157,24 +2162,8 @@ int ss_panel_on_post(struct samsung_display_driver_data *vdd)
 	if (vdd->copr.copr_on)
 		ss_send_cmd(vdd, TX_COPR_ENABLE);
 
-	if (unlikely(vdd->is_factory_mode)){
+	if (unlikely(vdd->is_factory_mode))
 		ss_send_cmd(vdd, TX_FD_ON);
-			/*
-		* 1Frame Delay(33.4ms - 30FPS) Should be added for the project that needs FD cmd
-		* Swire toggled at TX_FD_OFF, TX_LPM_ON, TX_FD_ON, TX_LPM_OFF.
-		*/
-		if(!SS_IS_CMDS_NULL(ss_get_cmds(vdd, TX_FD_ON)))
-			usleep_range(34*1000, 34*1000);
-	}
-
-	/*
-	 * ESD Enable should be called after all the cmd's tx is done.
-	 * Some command may occur unexpected esd detect because of EL_ON signal control
-	 */
-	if (ss_is_esd_check_enabled(vdd)) {
-		if (vdd->esd_recovery.esd_irq_enable)
-			vdd->esd_recovery.esd_irq_enable(true, true, (void *)vdd);
-	}
 
 	vdd->panel_state = PANEL_PWR_ON;
 
@@ -2251,6 +2240,10 @@ int ss_panel_off_post(struct samsung_display_driver_data *vdd)
 
 	if (vdd->finger_mask)
 		vdd->finger_mask = false;
+
+	/* To prevent panel off without finger off */
+	if (vdd->br.finger_mask_hbm_on)
+		vdd->br.finger_mask_hbm_on = false;
 
 	LCD_INFO("-\n");
 	SS_XLOG(SS_XLOG_FINISH);
@@ -3206,12 +3199,11 @@ static void ss_panel_parse_dt(struct samsung_display_driver_data *vdd)
 
 	/* Set LP11 init flag */
 	vdd->dtsi_data.samsung_lp11_init = of_property_read_bool(np, "samsung,dsi-lp11-init");
-	LCD_ERR("LP11 init %s\n",
-		vdd->dtsi_data.samsung_lp11_init ? "enabled" : "disabled");
+	LCD_ERR("LP11 init %s\n",vdd->dtsi_data.samsung_lp11_init ? "enabled" : "disabled");
 
+	/*IMPORTANT NOTE :- below two flag should be used only if "qcom,mdss-dsi-lp11-init" is disable*/
 	vdd->dtsi_data.samsung_reset_before_dsi_off = of_property_read_bool(np, "samsung,mdss-reset-before-dsi-off");
 	vdd->dtsi_data.samsung_reset_after_dsi_on = of_property_read_bool(np, "samsung,mdss-reset-after-dsi-on");
-	vdd->dtsi_data.samsung_panel_poweroff_delay = of_property_read_bool(np, "samsung,mdss-dsi-poweroff-delay");
 
 	rc = of_property_read_u32(np, "samsung,mdss-power-on-reset-delay-us", tmp);
 	vdd->dtsi_data.samsung_power_on_reset_delay = (!rc ? tmp[0] : 0);
@@ -3911,14 +3903,16 @@ void ss_panel_low_power_config(struct samsung_display_driver_data *vdd, int enab
 
 	ss_panel_lpm_power_ctrl(vdd, enable);
 
+	ss_panel_lpm_ctrl(vdd, enable);
+
 	if (enable) {
 		vdd->esd_recovery.is_wakeup_source = true;
 	} else {
 		vdd->esd_recovery.is_wakeup_source = false;
 	}
 
-	ss_panel_lpm_ctrl(vdd, enable);
-
+	if (vdd->esd_recovery.esd_irq_enable)
+		vdd->esd_recovery.esd_irq_enable(true, true, (void *)vdd);
 }
 
 /*
@@ -4174,10 +4168,6 @@ void ss_panel_lpm_ctrl(struct samsung_display_driver_data *vdd, int enable)
 
 	mutex_lock(&vdd->panel_lpm.lpm_lock);
 
-	/* To avoid unexpected ESD detction, Disable ESD irq before cmd tx related with lpm */
-	if (vdd->esd_recovery.esd_irq_enable)
-			vdd->esd_recovery.esd_irq_enable(false, true, (void *)vdd);
-
 	if (enable) { /* AOD ON(Enter) */
 		if (unlikely(vdd->is_factory_mode) && !ss_is_panel_lpm(vdd)) {
 			LCD_INFO("[Panel LPM] Set low brightness for factory mode (%d) \n", vdd->br.bl_level);
@@ -4211,20 +4201,8 @@ void ss_panel_lpm_ctrl(struct samsung_display_driver_data *vdd, int enable)
 		ss_send_cmd(vdd, TX_LPM_ON);
  		LCD_INFO("[Panel LPM] Send panel LPM cmds\n");
 
-		if (unlikely(vdd->is_factory_mode)){
+		if (unlikely(vdd->is_factory_mode))
 			ss_send_cmd(vdd, TX_DISPLAY_ON);
-				/*
-			* 1Frame Delay(33.4ms - 30FPS) Should be added for the project that needs FD cmd
-			* Swire toggled at TX_FD_OFF, TX_LPM_ON, TX_FD_ON, TX_LPM_OFF.
-			* And the on-off sequences in factory binary are like below
-			* AOD on : ESD disable -> TX_FD_OFF -> TX_LPM_ON -> need 34ms delay -> ESD enable
-			* AOD off : ESD disable -> TX_LPM_OFF -> TX_FD_ON -> need 34ms delay -> ESD enable
-			* so we need 34ms delay for TX_LPM_ON & TX_FD_ON respectively.
-			* But to reduce flicker issue, Add delay 34ms after 29(display on) cmd.
-			*/
-			if(!SS_IS_CMDS_NULL(ss_get_cmds(vdd, TX_FD_OFF)))
-				usleep_range(34*1000, 34*1000);
-		}
 		else {
 			/* The display_on cmd will be sent on next commit */
 			vdd->display_status_dsi.wait_disp_on = true;
@@ -4284,17 +4262,6 @@ void ss_panel_lpm_ctrl(struct samsung_display_driver_data *vdd, int enable)
 			ss_send_cmd(vdd, TX_FD_ON);
 			ss_send_cmd(vdd, TX_DISPLAY_ON);
 			vdd->panel_state = PANEL_PWR_ON;
-				/*
-			* 1Frame Delay(33.4ms - 30FPS) Should be added for the project that needs FD cmd
-			* Swire toggled at TX_FD_OFF, TX_LPM_ON, TX_FD_ON, TX_LPM_OFF.
-			* And the on-off sequences in factory binary are like below
-			* AOD on : ESD disable -> TX_FD_OFF -> TX_LPM_ON -> need 34ms delay -> ESD enable
-			* AOD off : ESD disable -> TX_LPM_OFF -> TX_FD_ON -> need 34ms delay -> ESD enable
-			* so we need 34ms delay for TX_LPM_ON & TX_FD_ON respectively.
-			* But to reduce flicker issue, Add delay 34ms after 29(display on) cmd.
-			*/
-			if(!SS_IS_CMDS_NULL(ss_get_cmds(vdd, TX_FD_ON)))
-				usleep_range(34*1000, 34*1000);
 		} else {
 			/* The display_on cmd will be sent on next commit */
 			vdd->display_status_dsi.wait_disp_on = true;
@@ -4305,10 +4272,6 @@ void ss_panel_lpm_ctrl(struct samsung_display_driver_data *vdd, int enable)
 		/* 1Frame Delay(33.4ms - 30FPS) Should be added */
 		usleep_range(34*1000, 34*1000);
 	}
-
-	/* To avoid unexpected ESD detction, Enable ESD irq after cmd tx related with lpm */
-	if (vdd->esd_recovery.esd_irq_enable)
-		vdd->esd_recovery.esd_irq_enable(true, true, (void *)vdd);
 
 	LCD_INFO("[Panel LPM] En/Dis : %s, LPM_MODE : %s, Hz : 30Hz, bl_level : %s\n",
 				/* Enable / Disable */
