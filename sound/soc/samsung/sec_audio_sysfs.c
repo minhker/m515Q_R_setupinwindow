@@ -46,7 +46,7 @@ static ssize_t audio_amp_##id##_temperature_max_show(struct device *dev, \
 		dev_info(dev, "%s: No callback registered\n", __func__); \
 	return snprintf(buf, PAGE_SIZE, "%d\n", report); \
 } \
-static DEVICE_ATTR(temperature_max_##id, S_IRUGO | S_IWUSR | S_IWGRP, \
+static DEVICE_ATTR(temperature_max_##id, 0664, \
 			audio_amp_##id##_temperature_max_show, NULL); \
 static ssize_t audio_amp_##id##_temperature_keep_max_show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
@@ -58,7 +58,7 @@ static ssize_t audio_amp_##id##_temperature_keep_max_show(struct device *dev, \
 		dev_info(dev, "%s: No callback registered\n", __func__); \
 	return snprintf(buf, PAGE_SIZE, "%d\n", report); \
 } \
-static DEVICE_ATTR(temperature_keep_max_##id, S_IRUGO | S_IWUSR | S_IWGRP, \
+static DEVICE_ATTR(temperature_keep_max_##id, 0664, \
 			audio_amp_##id##_temperature_keep_max_show, NULL); \
 static ssize_t audio_amp_##id##_temperature_overcount_show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
@@ -70,7 +70,7 @@ static ssize_t audio_amp_##id##_temperature_overcount_show(struct device *dev, \
 		dev_info(dev, "%s: No callback registered\n", __func__); \
 	return snprintf(buf, PAGE_SIZE, "%d\n", report); \
 } \
-static DEVICE_ATTR(temperature_overcount_##id, S_IRUGO | S_IWUSR | S_IWGRP, \
+static DEVICE_ATTR(temperature_overcount_##id, 0664, \
 			audio_amp_##id##_temperature_overcount_show, NULL); \
 static ssize_t audio_amp_##id##_excursion_max_show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
@@ -82,7 +82,7 @@ static ssize_t audio_amp_##id##_excursion_max_show(struct device *dev, \
 		dev_info(dev, "%s: No callback registered\n", __func__); \
 	return snprintf(buf, PAGE_SIZE, "%04d\n", report); \
 } \
-static DEVICE_ATTR(excursion_max_##id, S_IRUGO | S_IWUSR | S_IWGRP, \
+static DEVICE_ATTR(excursion_max_##id, 0664, \
 			audio_amp_##id##_excursion_max_show, NULL); \
 static ssize_t audio_amp_##id##_excursion_overcount_show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
@@ -94,7 +94,7 @@ static ssize_t audio_amp_##id##_excursion_overcount_show(struct device *dev, \
 		dev_info(dev, "%s: No callback registered\n", __func__); \
 	return snprintf(buf, PAGE_SIZE, "%d\n", report); \
 } \
-static DEVICE_ATTR(excursion_overcount_##id, S_IRUGO | S_IWUSR | S_IWGRP, \
+static DEVICE_ATTR(excursion_overcount_##id, 0664, \
 			audio_amp_##id##_excursion_overcount_show, NULL); \
 static struct attribute *audio_amp_##id##_attr[] = { \
 	&dev_attr_temperature_max_##id.attr, \
@@ -340,7 +340,7 @@ static ssize_t audio_check_codec_id_show(struct device *dev,
 	return snprintf(buf, 4, "%d\n", report);
 }
 
-static DEVICE_ATTR(check_codec_id, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(check_codec_id, 0664,
 			audio_check_codec_id_show, NULL);
 
 
@@ -605,9 +605,8 @@ subsys_initcall(sec_audio_sysfs_init);
 
 static void __exit sec_audio_sysfs_exit(void)
 {
-	if (audio_data->amp_dev) {
+	if (audio_data->amp_dev)
 		device_destroy(audio_data->audio_class, AMP_DEV_ID);
-	}
 
 	if (audio_data->codec_dev) {
 		sysfs_remove_group(&audio_data->codec_dev->kobj,

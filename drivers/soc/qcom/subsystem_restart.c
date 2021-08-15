@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -304,6 +304,8 @@ static ssize_t restart_level_store(struct device *dev,
 
 	for (i = 0; i < ARRAY_SIZE(restart_levels); i++)
 		if (!strncasecmp(buf, restart_levels[i], count)) {
+			pil_ipc("[%s]: change restart level to %d\n",
+				subsys->desc->name, i);
 			subsys->restart_level = i;
 			return orig_count;
 		}
@@ -567,6 +569,7 @@ static void notif_timeout_handler(unsigned long data)
 		SSR_NOTIF_TIMEOUT_WARN(unknown_err_msg);
 	}
 
+	sec_debug_summary_set_timeout_subsys(timeout_data->source_name, timeout_data->dest_name);
 }
 
 static void _setup_timeout(struct subsys_desc *source_ss,
@@ -825,6 +828,7 @@ static int subsystem_powerup(struct subsys_device *dev, void *data)
 	pr_info("[%s:%d]: Powering up %s\n", current->comm, current->pid, name);
 	reinit_completion(&dev->err_ready);
 
+	enable_all_irqs(dev);
 	ret = dev->desc->powerup(dev->desc);
 	if (ret < 0) {
 		notify_each_subsys_device(&dev, 1, SUBSYS_POWERUP_FAILURE,
@@ -840,7 +844,6 @@ static int subsystem_powerup(struct subsys_device *dev, void *data)
 			pr_err("Powerup failure on %s\n", name);
 		return ret;
 	}
-	enable_all_irqs(dev);
 
 	ret = wait_for_err_ready(dev);
 	if (ret) {
@@ -898,7 +901,7 @@ static int subsys_start(struct subsys_device *subsys)
 		subsys_set_state(subsys, SUBSYS_ONLINE);
 		return 0;
 	}
-
+	pil_ipc("[%s]: before wait_for_err_ready\n", subsys->desc->name);
 	ret = wait_for_err_ready(subsys);
 	if (ret) {
 		/* pil-boot succeeded but we need to shutdown
@@ -914,6 +917,7 @@ static int subsys_start(struct subsys_device *subsys)
 
 	notify_each_subsys_device(&subsys, 1, SUBSYS_AFTER_POWERUP,
 								NULL);
+	pil_ipc("[%s]: exit\n", subsys->desc->name);
 	return ret;
 }
 
@@ -921,6 +925,7 @@ static void subsys_stop(struct subsys_device *subsys)
 {
 	const char *name = subsys->desc->name;
 
+	pil_ipc("[%s]: entry\n", subsys->desc->name);
 	notify_each_subsys_device(&subsys, 1, SUBSYS_BEFORE_SHUTDOWN, NULL);
 	reinit_completion(&subsys->shutdown_ack);
 	if (!of_property_read_bool(subsys->desc->dev->of_node,
@@ -940,6 +945,7 @@ static void subsys_stop(struct subsys_device *subsys)
 	subsys_set_state(subsys, SUBSYS_OFFLINE);
 	disable_all_irqs(subsys);
 	notify_each_subsys_device(&subsys, 1, SUBSYS_AFTER_SHUTDOWN, NULL);
+	pil_ipc("[%s]: exit\n", subsys->desc->name);
 }
 
 int subsystem_set_fwname(const char *name, const char *fw_name)
@@ -1325,6 +1331,14 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		silent_ssr = 0;
 	}
 
+#ifdef CONFIG_SENSORS_SSC
+	if (!strcmp(name, "adsp")) {
+		if (dev->desc->run_fssr) {
+			dev->restart_level = RESET_SUBSYS_COUPLED;
+			dev->desc->run_fssr = false;
+		}
+	}
+#endif
 	/*
 	 * If a system reboot/shutdown is underway, ignore subsystem errors.
 	 * However, print a message so that we know that a subsystem behaved
@@ -1439,6 +1453,13 @@ int subsystem_crashed(const char *name)
 	return 0;
 }
 EXPORT_SYMBOL(subsystem_crashed);
+
+#ifdef CONFIG_SENSORS_SSC
+void subsys_set_fssr(struct subsys_device *dev, bool value)
+{
+	dev->desc->run_fssr = value;
+}
+#endif
 
 void subsys_set_crash_status(struct subsys_device *dev,
 				enum crash_status crashed)

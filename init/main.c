@@ -96,6 +96,7 @@
 #include <asm/cacheflush.h>
 #include <soc/qcom/boot_stats.h>
 
+#include "do_mounts.h"
 #include <linux/sec_bootstat.h>
 #ifdef CONFIG_SEC_GPIO_DVS
 #include <linux/secgpio_dvs.h>
@@ -118,7 +119,6 @@ void __init __weak defex_load_rules(void) { }
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
-extern void fork_init(void);
 extern void radix_tree_init(void);
 
 #ifdef CONFIG_DEFERRED_INITCALLS
@@ -603,6 +603,29 @@ void __init __weak thread_stack_cache_init(void)
 
 void __init __weak mem_encrypt_init(void) { }
 
+/* Report memory auto-initialization states for this boot. */
+static void __init report_meminit(void)
+{
+	const char *stack;
+
+	if (IS_ENABLED(CONFIG_INIT_STACK_ALL))
+		stack = "all";
+	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF_ALL))
+		stack = "byref_all";
+	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF))
+		stack = "byref";
+	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_USER))
+		stack = "__user";
+	else
+		stack = "off";
+
+	pr_info("mem auto-init: stack:%s, heap alloc:%s, heap free:%s\n",
+		stack, want_init_on_alloc(GFP_KERNEL) ? "on" : "off",
+		want_init_on_free() ? "on" : "off");
+	if (want_init_on_free())
+		pr_info("mem auto-init: clearing system memory may take some time...\n");
+}
+
 /*
  * Set up kernel memory allocators
  */
@@ -614,6 +637,7 @@ static void __init mm_init(void)
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
 	page_ext_init_flatmem();
+	report_meminit();
 	mem_init();
 	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
 	kmem_cache_init();
@@ -649,6 +673,10 @@ static void __init rkp_init(void)
 	rkp_init_data.init_mm_pgd = (u64)__pa(swapper_pg_dir);
 	rkp_init_data.id_map_pgd = (u64)__pa(idmap_pg_dir);
 	rkp_init_data.zero_pg_addr = (u64)__pa(empty_zero_page);
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+	rkp_init_data.tramp_pgd = (u64)__pa(tramp_pg_dir);
+	rkp_init_data.tramp_valias = (u64)TRAMP_VALIAS;
+#endif
 	uh_call(UH_APP_RKP, RKP_GET_RO_BITMAP, (u64)&rkp_s_bitmap_ro, 0, 0, 0);
 	uh_call(UH_APP_RKP, RKP_GET_DBL_BITMAP, (u64)&rkp_s_bitmap_dbl, 0, 0, 0);
 	uh_call(UH_APP_RKP, RKP_START, (u64)&rkp_init_data, (u64)kimage_voffset, 0, (u64)memstart_addr);
@@ -750,6 +778,13 @@ asmlinkage __visible void __init start_kernel(void)
 	build_all_zonelists(NULL);
 	page_alloc_init();
 
+	pr_notice("Kernel command line: %s\n",
+			!IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP) ?
+			boot_command_line :
+			sec_debug_get_erased_command_line());
+
+	/* parameters may set static keys */
+	jump_label_init();
 	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
 				  static_command_line, __start___param,
@@ -758,8 +793,6 @@ asmlinkage __visible void __init start_kernel(void)
 	if (!IS_ERR_OR_NULL(after_dashes))
 		parse_args("Setting init args", after_dashes, NULL, 0, -1, -1,
 			   NULL, set_init_arg);
-
-	jump_label_init();
 
 	/*
 	 * These use large bootmem allocations and must precede
@@ -918,6 +951,8 @@ asmlinkage __visible void __init start_kernel(void)
 
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
+
+	prevent_tail_call_optimization();
 }
 
 /* Call all constructor functions linked into the kernel. */
@@ -1247,7 +1282,9 @@ static inline void mark_readonly(void)
 static int __ref kernel_init(void *unused)
 {
 	int ret;
-
+#ifdef CONFIG_EARLY_SERVICES
+	int status = 0;
+#endif
 	kernel_init_freeable();
 
 #ifdef CONFIG_SEC_GPIO_DVS
@@ -1277,6 +1314,15 @@ static int __ref kernel_init(void *unused)
 	rcu_end_inkernel_boot();
 	place_marker("M - DRIVER Kernel Boot Done");
 
+#ifdef CONFIG_EARLY_SERVICES
+	status = get_early_services_status();
+	if (status) {
+		struct kstat stat;
+		/* Wait for early services SE policy load completion signal */
+		while (vfs_stat("/dev/sedone", &stat) != 0)
+			;
+	}
+#endif
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret) {
@@ -1370,6 +1416,7 @@ static noinline void __init kernel_init_freeable(void)
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}
+	launch_early_services();
 
 	/*
 	 * Ok, we have completed the initial bootup, and

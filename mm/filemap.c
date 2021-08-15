@@ -48,6 +48,10 @@
 #include <linux/fscrypto_sdp_cache.h>
 #endif
 
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+#include <linux/io_record.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/filemap.h>
 
@@ -357,7 +361,8 @@ int __filemap_fdatawrite_range(struct address_space *mapping, loff_t start,
 		.range_end = end,
 	};
 
-	if (!mapping_cap_writeback_dirty(mapping))
+	if (!mapping_cap_writeback_dirty(mapping) ||
+	    !mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
 		return 0;
 
 	wbc_attach_fdatawrite_inode(&wbc, mapping->host);
@@ -479,6 +484,28 @@ int filemap_fdatawait_range(struct address_space *mapping, loff_t start_byte,
 	return filemap_check_errors(mapping);
 }
 EXPORT_SYMBOL(filemap_fdatawait_range);
+
+/**
+ * filemap_fdatawait_range_keep_errors - wait for writeback to complete
+ * @mapping:		address space structure to wait for
+ * @start_byte:		offset in bytes where the range starts
+ * @end_byte:		offset in bytes where the range ends (inclusive)
+ *
+ * Walk the list of under-writeback pages of the given address space in the
+ * given range and wait for all of them.  Unlike filemap_fdatawait_range(),
+ * this function does not clear error status of the address space.
+ *
+ * Use this function if callers don't handle errors themselves.  Expected
+ * call sites are system-wide / filesystem-wide data flushers: e.g. sync(2),
+ * fsfreeze(8)
+ */
+int filemap_fdatawait_range_keep_errors(struct address_space *mapping,
+		loff_t start_byte, loff_t end_byte)
+{
+	__filemap_fdatawait_range(mapping, start_byte, end_byte);
+	return filemap_check_and_keep_errors(mapping);
+}
+EXPORT_SYMBOL(filemap_fdatawait_range_keep_errors);
 
 /**
  * file_fdatawait_range - wait for writeback to complete
@@ -2014,6 +2041,9 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	prev_offset = ra->prev_pos & (PAGE_SIZE-1);
 	last_index = (*ppos + iter->count + PAGE_SIZE-1) >> PAGE_SHIFT;
 	offset = *ppos & ~PAGE_MASK;
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	record_io_info(filp, index, last_index - index);
+#endif
 
 	for (;;) {
 		struct page *page;
@@ -2383,7 +2413,33 @@ static int lock_page_maybe_drop_mmap(struct vm_fault *vmf, struct page *page,
 	return 1;
 }
 
-int mmap_readaround_limit;
+static noinline void tracing_mark_write(bool start, struct file *file, pgoff_t offset, unsigned int size, bool sync)
+{
+	char buf[256], *path;
+
+	if (!tracing_is_on() || file == NULL || file->f_path.dentry == NULL)
+		return;
+
+	if (start) {
+		path = dentry_path(file->f_path.dentry, buf, 256);
+
+		if (!IS_ERR(path))
+			trace_printk("B|%d|%d , %s , %lu , %d\n", current->tgid, sync, path, offset, size);
+		else
+			trace_printk("B|%d|%d , %s , %lu , %d\n", current->tgid, sync, "dentry_path failed", offset, size);
+	} else {
+		trace_printk("E|%d\n", current->tgid);
+	}
+}
+
+#define trace_fault_file_path_start(...) tracing_mark_write(1, ##__VA_ARGS__)
+#define trace_fault_file_path_end(...) tracing_mark_write(0, ##__VA_ARGS__)
+
+#if CONFIG_MMAP_READAROUND_LIMIT == 0
+int mmap_readaround_limit = (VM_MAX_READAHEAD / 4); 		/* page */
+#else
+int mmap_readaround_limit = CONFIG_MMAP_READAROUND_LIMIT;	/* page */
+#endif
 
 /*
  * Synchronous readahead happens when we don't even find a page in the page
@@ -2409,8 +2465,10 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 
 	if (vmf->vma->vm_flags & VM_SEQ_READ) {
 		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+		trace_fault_file_path_start(file, offset, ra->ra_pages, 1);
 		page_cache_sync_readahead(mapping, ra, file, offset,
 					  ra->ra_pages);
+		trace_fault_file_path_end(file, offset, ra->ra_pages, 1);
 		return fpin;
 	}
 
@@ -2428,21 +2486,14 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	/*
 	 * mmap read-around
 	 */
-#if CONFIG_MMAP_READAROUND_LIMIT == 0
-	ra_pages = ra->ra_pages;
-#else
-	if (ra->ra_pages > CONFIG_MMAP_READAROUND_LIMIT)
-		ra_pages = CONFIG_MMAP_READAROUND_LIMIT;
-	else
-		ra_pages = ra->ra_pages;
-#endif
-    if (mmap_readaround_limit && ra->ra_pages > mmap_readaround_limit)
-        ra_pages = mmap_readaround_limit;
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	ra_pages = min_t(unsigned int, ra->ra_pages, mmap_readaround_limit);
 	ra->start = max_t(long, 0, offset - ra_pages / 2);
 	ra->size = ra_pages;
 	ra->async_size = ra_pages / 4;
+	trace_fault_file_path_start(file, offset, ra_pages, 1);
 	ra_submit(ra, mapping, file);
+	trace_fault_file_path_end(file, offset, ra_pages, 1);
 	return fpin;
 }
 
@@ -2467,8 +2518,10 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 		ra->mmap_miss--;
 	if (PageReadahead(page)) {
 		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+		trace_fault_file_path_start(file, offset, ra->ra_pages, 0);
 		page_cache_async_readahead(mapping, ra, file,
 					   page, offset, ra->ra_pages);
+		trace_fault_file_path_end(file, offset, ra->ra_pages, 0);
 	}
 	return fpin;
 }
@@ -2591,7 +2644,9 @@ page_not_uptodate:
 	 */
 	ClearPageError(page);
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	trace_fault_file_path_start(file, offset, 1, 1);
 	error = mapping->a_ops->readpage(file, page);
+	trace_fault_file_path_end(file, offset, 1, 1);
 	if (!error) {
 		wait_on_page_locked(page);
 		if (!PageUptodate(page))
@@ -2711,6 +2766,11 @@ next:
 			break;
 	}
 	rcu_read_unlock();
+
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	/* end_pgoff is inclusive */
+	record_io_info(file, start_pgoff, last_pgoff - start_pgoff + 1);
+#endif
 }
 EXPORT_SYMBOL(filemap_map_pages);
 
@@ -2945,6 +3005,9 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = file->f_mapping->host;
 	unsigned long limit = rlimit(RLIMIT_FSIZE);
 	loff_t pos;
+
+	if (IS_SWAPFILE(inode))
+		return -ETXTBSY;
 
 	if (!iov_iter_count(from))
 		return 0;

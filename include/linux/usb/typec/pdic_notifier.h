@@ -32,6 +32,7 @@ typedef enum {
 	CCIC_NOTIFY_DEV_USB_DP,
 	CCIC_NOTIFY_DEV_SUB_BATTERY,
 	CCIC_NOTIFY_DEV_SECOND_MUIC,
+	CCIC_NOTIFY_DEV_ALL,
 } ccic_notifier_device_t;
 
 typedef enum {
@@ -52,6 +53,8 @@ typedef enum {
 	CCIC_NOTIFY_ID_FAC,
 	CCIC_NOTIFY_ID_CC_PIN_STATUS,
 	CCIC_NOTIFY_ID_CABLE,
+	CCIC_NOTIFY_ID_DEVICE_INFO,
+	CCIC_NOTIFY_ID_SVID_INFO,
 } ccic_notifier_id_t;
 
 typedef struct {
@@ -177,6 +180,32 @@ typedef struct {
 #endif
 } USB_DP_NOTI_TYPEDEF;
 
+/* ID = 17 : Device Info */
+typedef struct {
+	uint64_t src:4;
+	uint64_t dest:4;
+	uint64_t id:8;
+	uint64_t vendor_id:16;
+	uint64_t product_id:16;
+	uint64_t version:8;
+	uint64_t ifpmic_index:8;
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	void *pd;
+#endif
+} CC_NOTI_DEVICE_INFO_TYPEDEF;
+
+/* ID = 18 : Standard Vendor ID Info */
+typedef struct {
+	uint64_t src:4;
+	uint64_t dest:4;
+	uint64_t id:8;
+	uint64_t standard_vendor_id:16;
+	uint64_t reserved:32;
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	void *pd;
+#endif
+} CC_NOTI_SVID_INFO_TYPEDEF;
+
 typedef enum {
 	USB_STATUS_NOTIFY_DETACH = 0,
 	USB_STATUS_NOTIFY_ATTACH_DFP = 1, /* Host */
@@ -206,7 +235,7 @@ extern int ccic_notifier_unregister(struct notifier_block *nb);
 extern int ccic_notifier_init(void);
 
 #define CCIC_NOTI_DEST_NUM	(12)
-#define CCIC_NOTI_ID_NUM	(17)
+#define CCIC_NOTI_ID_NUM	(19)
 #define CCIC_NOTI_RID_NUM	(8)
 #define CCIC_NOTI_USB_STATUS_NUM (5)
 #define CCIC_NOTI_PIN_STATUS_NUM	(8)

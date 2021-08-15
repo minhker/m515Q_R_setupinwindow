@@ -70,6 +70,8 @@ char CCIC_NOTI_ID_Print[CCIC_NOTI_ID_NUM][20] = {
 	{"ID_FAC"},
 	{"ID_PIN_STATUS"},
 	{"ID_CABLE"},
+	{"ID_DEVICE_INFO"},
+	{"ID_SVID_INFO"},
 };
 
 char CCIC_NOTI_RID_Print[CCIC_NOTI_RID_NUM][15] = {
@@ -307,6 +309,25 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 		return 0;
 #endif
 #endif
+	case CCIC_NOTIFY_ID_DEVICE_INFO:
+		pr_info("%s: src:%01x dest:%01x id:%02x vendor_id:%04x product_id:%04x ifpmic_index:%02x version:%02x\n",
+			__func__,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->src,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->dest,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->id,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->vendor_id,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->product_id,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->ifpmic_index,
+			((CC_NOTI_DEVICE_INFO_TYPEDEF *)p_noti)->version);
+		break;
+	case CCIC_NOTIFY_ID_SVID_INFO:
+		pr_info("%s: src:%01x dest:%01x id:%02x standard_vendor_id:%04x\n",
+			__func__,
+			((CC_NOTI_SVID_INFO_TYPEDEF *)p_noti)->src,
+			((CC_NOTI_SVID_INFO_TYPEDEF *)p_noti)->dest,
+			((CC_NOTI_SVID_INFO_TYPEDEF *)p_noti)->id,
+			((CC_NOTI_SVID_INFO_TYPEDEF *)p_noti)->standard_vendor_id);
+		break;
 	default:
 		pr_info("%s: src:%01x dest:%01x id:%02x	sub1:%d sub2:%02x sub3:%02x\n", __func__,
 			((CC_NOTI_TYPEDEF *)p_noti)->src,

@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/usb/typec/s2mu107/s2mu107_pd.h>
+#include <linux/usb/typec/s2mu107/s2mu106_typec.h>
 #include <linux/delay.h>
 #include <linux/completion.h>
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
@@ -15,9 +16,17 @@
 #include <linux/usb/typec.h>
 #endif
 
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#else
 #include <linux/muic/muic.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #endif /* CONFIG_MUIC_NOTIFIER */
 
 #include <linux/usb_notify.h>
@@ -47,6 +56,7 @@ policy_state usbpd_policy_src_startup(struct policy_data *policy)
 	struct usbpd_data *pd_data = policy_to_usbpd(policy);
 	int ret = PE_SRC_Send_Capabilities;
 	long long ms = 0;
+	int vbus_check = 0;
 
 	/**********************************************
 	Actions on entry:
@@ -81,8 +91,35 @@ policy_state usbpd_policy_src_startup(struct policy_data *policy)
 		}
 	}
 
-	/* Configuration Channel On */
-	pd_data->phy_ops.set_cc_control(pd_data, USBPD_CC_ON);
+	/* Check Valid VBUS */
+	usbpd_timer1_start(pd_data);
+	while(1){
+		if (policy->plug_valid == 0) {
+			dev_info(pd_data->dev, "%s plug is not valid\n", __func__);
+			ret = PE_SRC_Startup;
+			break;
+		}
+
+		vbus_check = pd_data->phy_ops.vbus_on_check(pd_data, OTG_5V);
+
+		if (vbus_check < 0 || vbus_check > 0) {
+			dev_info(pd_data->dev, "%s vbus_check = %d\n", __func__, vbus_check);
+			/* Delay for Charger IRQ */
+			msleep(80);
+
+			/* Configuration Channel On */
+			pd_data->phy_ops.set_cc_control(pd_data, USBPD_CC_ON);
+			ret = PE_SRC_Send_Capabilities;
+			CHECK_CMD(pd_data, MANAGER_REQ_SRCCAP_CHANGE, PE_SRC_Send_Capabilities);
+			break;
+		}
+
+		ms = usbpd_check_time1(pd_data);
+		if (ms >= 1000) {
+			dev_info(pd_data->dev, "%s Timer Over\n", __func__);
+			break;
+		}
+	}
 
 	return ret;
 }
@@ -145,7 +182,12 @@ policy_state usbpd_policy_src_send_capabilities(struct policy_data *policy)
 
 	/* Source Capabilities PDO Read & Write */
 	policy->tx_msg_header.word = pd_data->source_msg_header.word;
-	policy->tx_data_obj[0].object = pd_data->source_data_obj.object;
+	if (pd_data->thermal_state) {
+		policy->tx_data_obj[0].object = pd_data->source_data_obj_thermal.object;
+	} else {
+		policy->tx_data_obj[0].object = pd_data->source_data_obj[0].object;
+		policy->tx_data_obj[1].object = pd_data->source_data_obj[1].object;
+	}
 
 	/* Interrupt Status Bit Clear  */
 	pd_data->phy_ops.get_status(pd_data, MSG_ERROR );
@@ -169,11 +211,6 @@ policy_state usbpd_policy_src_send_capabilities(struct policy_data *policy)
 		}
 		ms = usbpd_check_time1(pd_data);
 		if (pd_data->phy_ops.get_status(pd_data, MSG_REQUEST)) {
-			pd_data->counter.hard_reset_counter = 0;
-			pd_data->counter.caps_counter = 0;
-			pd_data->source_request_obj.object
-				= policy->rx_data_obj[0].object;
-			dev_info(pd_data->dev, "got Request.\n");
 			ret = PE_SRC_Negotiate_Capability;
 			break;
 		}
@@ -242,6 +279,11 @@ policy_state usbpd_policy_src_negotiate_capability(struct policy_data *policy)
 	/* PD State Inform for AP */
 	dev_info(pd_data->dev, "%s\n", __func__);
 
+	pd_data->counter.hard_reset_counter = 0;
+	pd_data->counter.caps_counter = 0;
+	pd_data->source_request_obj.object = policy->rx_data_obj[0].object;
+	dev_info(pd_data->dev, "got Request(%x).\n", pd_data->source_request_obj.object);
+
 #if defined(CONFIG_PDIC_PD30)
 	/* Check Specification Revision */
 	if(pd_data->protocol_rx.msg_header.spec_revision >= USBPD_PD3_0)
@@ -274,7 +316,8 @@ policy_state usbpd_policy_src_transition_supply(struct policy_data *policy)
 	struct usbpd_data *pd_data = policy_to_usbpd(policy);
 	int ret = PE_SRC_Ready;
 	long long ms1 = 0, ms2 = 0;
-
+	int otg_volt = 0;
+	int vbus_check = 0;
 	/**********************************************
 	Actions on entry:
 	Initialize and run SourceActivityTimer (see Section 8.3.3.5)
@@ -304,6 +347,11 @@ policy_state usbpd_policy_src_transition_supply(struct policy_data *policy)
 		}
 		ms1 = usbpd_check_time1(pd_data);
 		if (pd_data->phy_ops.get_status(pd_data, MSG_GOODCRC)) {
+			if (pd_data->source_request_obj.request_data_obj_pos_type.object_position == 2)
+				otg_volt = OTG_9V;
+			else
+				otg_volt = OTG_5V;
+			pd_data->phy_ops.set_otg_voltage(pd_data, otg_volt);
 
 			usbpd_timer2_start(pd_data);
 			while (1) {
@@ -312,14 +360,27 @@ policy_state usbpd_policy_src_transition_supply(struct policy_data *policy)
 					break;
 				}
 				ms2 = usbpd_check_time2(pd_data);
-				if (ms2 > tSrcTransition)
+				vbus_check = pd_data->phy_ops.vbus_on_check(pd_data, otg_volt);
+				if (vbus_check < 0 || vbus_check > 0) {
 					break;
+				}
+				if (ms2 > 450) {
+					if (otg_volt == OTG_9V) {
+						pd_data->thermal_unsupport = 1;
+						usbpd_manager_change_thermal_source_cap(1, 500);
+					}
+					break;
+				}
 			}
 
 			if (ret == PE_SRC_Transition_Supply)
 				return ret;
 
+			pd_data->phy_ops.get_status(pd_data, MSG_REQUEST);
 			usbpd_send_ctrl_msg(pd_data, &policy->tx_msg_header, USBPD_PS_RDY, USBPD_DFP, USBPD_SOURCE);
+			
+			if (pd_data->thermal_unsupport)
+			msleep(15);
 
 			ret = PE_SRC_Ready;
 			break;
@@ -529,6 +590,12 @@ policy_state usbpd_policy_src_capability_response(struct policy_data *policy)
 		}
 		ms = usbpd_check_time1(pd_data);
 		if (pd_data->phy_ops.get_status(pd_data, MSG_GOODCRC)) {
+			if (pd_data->thermal_state) {
+				msleep(15);
+				usbpd_manager_inform_event(pd_data, MANAGER_SEND_PR_SWAP);
+				pd_data->thermal_swap = true;
+				pd_data->thermal_unsupport = 1;
+			}
 			ret = PE_SRC_Ready;
 			break;
 		}
@@ -716,22 +783,20 @@ policy_state usbpd_policy_src_give_source_cap(struct policy_data *policy)
 	pd_data->phy_ops.get_data_role(pd_data, &data_role);
 
 	/* Message Setting */
-	policy->tx_msg_header.msg_type = USBPD_Source_Capabilities;
+	policy->tx_msg_header.word = pd_data->source_msg_header.word;
 	policy->tx_msg_header.port_data_role = data_role;
-	policy->tx_msg_header.port_power_role = USBPD_SOURCE;
-	policy->tx_msg_header.num_data_objs = 1;
+	if (pd_data->thermal_state) {
+		policy->tx_data_obj[0].object = pd_data->source_data_obj_thermal.object;
+	} else {
+		policy->tx_data_obj[0].object = pd_data->source_data_obj[0].object;
+		policy->tx_data_obj[1].object = pd_data->source_data_obj[1].object;
+	}
 
-	policy->tx_data_obj[0].object = 0;
-	policy->tx_data_obj[0].power_data_obj.max_current = 500 / 10;
-	policy->tx_data_obj[0].power_data_obj.voltage = 5000 / 50;
-	policy->tx_data_obj[0].power_data_obj.peak_current = 0;
-	policy->tx_data_obj[0].power_data_obj.unchunked_extended_message_supported = 0;
-	policy->tx_data_obj[0].power_data_obj.data_role_swap = 1;
-	policy->tx_data_obj[0].power_data_obj.usb_comm_capable = 1;
-	policy->tx_data_obj[0].power_data_obj.externally_powered = 0;
-	policy->tx_data_obj[0].power_data_obj.usb_suspend_support = 1;
-	policy->tx_data_obj[0].power_data_obj.dual_role_power = 1;
-	policy->tx_data_obj[0].power_data_obj.supply = 0;
+	/* Interrupt Status Bit Clear  */
+	pd_data->phy_ops.get_status(pd_data, MSG_ERROR);
+	pd_data->phy_ops.get_status(pd_data, MSG_GOODCRC);
+	pd_data->phy_ops.get_status(pd_data, MSG_REQUEST);
+	pd_data->phy_ops.get_status(pd_data, MSG_GET_SNK_CAP);
 
 	/* Send Message */
 	usbpd_send_msg(pd_data, &policy->tx_msg_header, policy->tx_data_obj);
@@ -976,7 +1041,7 @@ policy_state usbpd_policy_snk_discovery(struct policy_data *policy)
 		}
 		ms = usbpd_check_time1(pd_data);
 
-		vbus_check = pd_data->phy_ops.vbus_on_check(pd_data);
+		vbus_check = pd_data->phy_ops.vbus_on_check(pd_data, OTG_5V);
 		if (vbus_check < 0 || vbus_check > 0) {
 			ret = PE_SNK_Wait_for_Capabilities;
 			break;
@@ -1250,6 +1315,8 @@ retry:
 
 			pd_data->phy_ops.pd_vbus_short_check(pd_data);
 			pd_data->phy_ops.get_vbus_short_check(pd_data, &vbus_short);
+			if (pd_data->select_status)
+				usbpd_manager_9V_pdo_select(pd_data, 1);
 #ifdef CONFIG_BATTERY_SAMSUNG
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 			if (vbus_short) {
@@ -1430,6 +1497,11 @@ policy_state usbpd_policy_snk_ready(struct policy_data *policy)
 
 		if (ms >= 10)
 			break;
+	}
+	
+	if (pd_data->thermal_swap) {
+		pd_data->thermal_swap = 0;
+		usbpd_manager_inform_event(pd_data, MANAGER_SEND_PR_SWAP);
 	}
 
 	if (data_role == USBPD_DFP)
@@ -2999,7 +3071,7 @@ policy_state usbpd_policy_ufp_vdm_send_identity(struct policy_data *policy)
 	/* Product VDO */
 	policy->tx_data_obj[3].object = 0;
 	policy->tx_data_obj[3].product_vdo.USB_Product_ID = 0x6860; /* Samsung Phone */
-	policy->tx_data_obj[3].product_vdo.Device_Version = 0; /* BCD Device */
+	policy->tx_data_obj[3].product_vdo.Device_Version = 0x0301; /* BCD Device */
 
 	/* TODO: data object should be prepared from device manager */
 	if (usbpd_send_msg(pd_data, &policy->tx_msg_header,
@@ -3062,18 +3134,20 @@ policy_state usbpd_policy_ufp_vdm_get_identity_nak(struct policy_data *policy)
 
 policy_state usbpd_policy_ufp_vdm_get_svids(struct policy_data *policy)
 {
-	struct usbpd_data *pd_data = policy_to_usbpd(policy);
+	//struct usbpd_data *pd_data = policy_to_usbpd(policy);
 
 	/**********************************************
 	Actions on entry:
 	Request SVIDs information from DPM
 	**********************************************/
 
+/*
 	if (usbpd_manager_get_svids(pd_data) == 0)
 		return PE_UFP_VDM_Send_SVIDs;
 	else
 		return PE_UFP_VDM_Get_SVIDs_NAK;
-
+*/
+	return PE_UFP_VDM_Send_SVIDs;
 }
 
 policy_state usbpd_policy_ufp_vdm_send_svids(struct policy_data *policy)
@@ -3107,8 +3181,10 @@ policy_state usbpd_policy_ufp_vdm_send_svids(struct policy_data *policy)
 	policy->tx_data_obj[0].structured_vdm.command_type = Responder_ACK;
 	policy->tx_data_obj[0].structured_vdm.command = Discover_SVIDs;
 
-	policy->tx_data_obj[1].vdm_svid.svid_0 = PD_SID;
-	policy->tx_data_obj[1].vdm_svid.svid_1 = 0xFF01;
+	//policy->tx_data_obj[1].vdm_svid.svid_0 = PD_SID;
+	//policy->tx_data_obj[1].vdm_svid.svid_1 = 0xFF01;
+	policy->tx_data_obj[1].vdm_svid.svid_0 = SAMSUNG_VENDOR_ID;
+	policy->tx_data_obj[1].vdm_svid.svid_1 = 0;
 
 	/* TODO: data object should be prepared from device manager */
 
@@ -3186,6 +3262,7 @@ policy_state usbpd_policy_ufp_vdm_get_modes(struct policy_data *policy)
 policy_state usbpd_policy_ufp_vdm_send_modes(struct policy_data *policy)
 {
 	struct usbpd_data *pd_data = policy_to_usbpd(policy);
+	struct usbpd_manager_data *manager = &pd_data->manager;
 	int power_role = 0;
 
 	/**********************************************
@@ -3202,7 +3279,8 @@ policy_state usbpd_policy_ufp_vdm_send_modes(struct policy_data *policy)
 	policy->tx_msg_header.num_data_objs = 2;
 
 	policy->tx_data_obj[0].object = 0;
-	policy->tx_data_obj[0].structured_vdm.svid = PD_SID;
+	//policy->tx_data_obj[0].structured_vdm.svid = PD_SID;
+	policy->tx_data_obj[0].structured_vdm.svid = manager->Standard_Vendor_ID;
 	policy->tx_data_obj[0].structured_vdm.vdm_type = Structured_VDM;
 #if defined(CONFIG_PDIC_PD30)
 	if(pd_data->specification_revision >= USBPD_PD3_0)
@@ -3276,12 +3354,21 @@ policy_state usbpd_policy_ufp_vdm_get_modes_nak(struct policy_data *policy)
 policy_state usbpd_policy_ufp_vdm_evaluate_mode_entry(struct policy_data *policy)
 {
 	struct usbpd_data *pd_data = policy_to_usbpd(policy);
+	struct usbpd_manager_data *manager = &pd_data->manager;
+	struct s2mu106_usbpd_data *pdic_data = pd_data->phy_driver_data;
 
 	/**********************************************
 	Actions on entry:
 	Request DPM to evaluate request to enter a Mode
 	**********************************************/
-	//dev_info(pd_data->dev, "%s\n", __func__);
+	dev_info(pd_data->dev, "%s\n", __func__);
+
+	usbpd_manager_enter_mode(pd_data);
+	if (manager->Standard_Vendor_ID == SAMSUNG_VENDOR_ID) {
+		/* Standard Vendor ID */
+		s2mu106_ccic_event_work(pdic_data, CCIC_NOTIFY_DEV_ALL,
+			CCIC_NOTIFY_ID_SVID_INFO, manager->Standard_Vendor_ID/*Standard Vendor ID*/, 0, 0);
+	}
 
 	/* Certification: Ellisys: TD.PD.VDMU.E15.Applicability */
 	if (usbpd_manager_get_svids(pd_data) == 0)

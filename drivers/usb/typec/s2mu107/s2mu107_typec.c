@@ -30,9 +30,17 @@
 #include <linux/usb/typec/s2mu107/s2mu107_typec.h>
 #include <linux/usb/typec/pdic_sysfs.h>
 
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#else
 #include <linux/muic/muic.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #endif /* CONFIG_MUIC_NOTIFIER */
 
 #if defined(CONFIG_PM_S2MU107)
@@ -1933,7 +1941,7 @@ static int s2mu107_get_pps_enable(void *_data, int *val)
 }
 #endif
 
-static int s2mu107_vbus_on_check(void *_data)
+static int s2mu107_vbus_on_check(void *_data, int volt)
 {
 #ifdef CONFIG_PM_S2MU107
 	struct usbpd_data *data = (struct usbpd_data *) _data;

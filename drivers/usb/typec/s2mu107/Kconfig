@@ -34,3 +34,10 @@ config CCIC_AUTO_PPS
     help
       If you say yes here you will get support for
       sending pps message automatically
+
+config CCIC_9V_OTG_SUPPORT 
+    bool "support 9V/1A PDO for OTG(pd source)"
+    depends on USE_CCIC
+    default n
+    help
+      If you say yes here you will get support for 9V/1A PDO for PD source

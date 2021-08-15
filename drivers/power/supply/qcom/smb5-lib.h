@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,7 @@
 #include <linux/alarmtimer.h>
 #include <linux/ktime.h>
 #include <linux/types.h>
+#include <linux/timer.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
 #include <linux/regulator/driver.h>
@@ -91,6 +92,8 @@ enum print_reason {
 #define DETACH_DETECT_VOTER		"DETACH_DETECT_VOTER"
 #define CC_MODE_VOTER			"CC_MODE_VOTER"
 #define MAIN_FCC_VOTER			"MAIN_FCC_VOTER"
+#define DCIN_AICL_VOTER			"DCIN_AICL_VOTER"
+#define OVERHEAT_LIMIT_VOTER		"OVERHEAT_LIMIT_VOTER"
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
 #define SEC_BATTERY_TERM_CURRENT_VOTER	"SEC_BATTERY_TERM_CURRENT_VOTER"
 #define SEC_BATTERY_SAFETY_TIMER_VOTER	"SEC_BATTERY_SAFETY_TIMER_VOTER"
@@ -121,7 +124,9 @@ enum print_reason {
 #define ITERM_LIMITS_PMI632_MA		5000
 #define ITERM_LIMITS_PM8150B_MA		10000
 #define ADC_CHG_ITERM_MASK		32767
-
+#define DCIN_ICL_MAX_UA			1500000
+#define DCIN_ICL_MIN_UA			100000
+#define DCIN_ICL_STEP_UA		100000
 #define SDP_100_MA			100000
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
 #define SDP_CURRENT_UA			500000
@@ -190,6 +195,8 @@ enum {
 	WEAK_ADAPTER_WA			= BIT(2),
 	USBIN_OV_WA			= BIT(3),
 	CHG_TERMINATION_WA		= BIT(4),
+	USBIN_ADC_WA			= BIT(5),
+	SKIP_MISC_PBS_IRQ_WA		= BIT(6),
 };
 
 enum jeita_cfg_stat {
@@ -459,10 +466,13 @@ struct smb_charger {
 	struct mutex		ps_change_lock;
 	struct mutex		dr_lock;
 	struct mutex		irq_status_lock;
+	struct mutex		adc_lock;
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
 	struct mutex		rechg_volt_lock;
 #endif
 	spinlock_t		typec_pr_lock;
+	struct mutex		dcin_aicl_lock;
+	struct mutex		dpdm_lock;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -489,6 +499,7 @@ struct smb_charger {
 
 	/* CC Mode */
 	int	adapter_cc_mode;
+	int	thermal_overheat;
 
 	/* regulators */
 	struct smb_regulator	*vbus_vreg;
@@ -518,6 +529,7 @@ struct smb_charger {
 	struct work_struct	jeita_update_work;
 	struct work_struct	moisture_protection_work;
 	struct work_struct	chg_termination_work;
+	struct work_struct	dcin_aicl_work;
 	struct delayed_work	ps_change_timeout_work;
 	struct delayed_work	clear_hdc_work;
 	struct delayed_work	icl_change_work;
@@ -544,6 +556,11 @@ struct smb_charger {
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
 	struct alarm		chg_termination_alarm;
+
+	struct alarm		dcin_aicl_alarm;
+	struct timer_list	apsd_timer;
+
+	struct charger_param	chg_param;
 #if defined(CONFIG_PM6150_WATER_DETECT)
 	struct alarm		lpd_dry_check_timer;
 	enum lpd_notify		lpd_notify;
@@ -555,7 +572,6 @@ struct smb_charger {
 #if defined(CONFIG_PM6150_USB_FALSE_DETECTION_WA_BY_GND) && !defined(CONFIG_SEC_FACTORY)
 	int 				rid_gnd_gpio_sts;
 #endif
-    struct charger_param	chg_param;
 	/* secondary charger config */
 	bool			sec_pl_present;
 	bool			sec_cp_present;
@@ -573,6 +589,7 @@ struct smb_charger {
 	bool			ok_to_pd;
 	bool			typec_legacy;
 	bool			typec_irq_en;
+	bool			typec_role_swap_failed;
 
 	/* cached status */
 	bool			system_suspend_supported;
@@ -591,6 +608,7 @@ struct smb_charger {
 	int			connector_type;
 	bool			otg_en;
 	bool			suspend_input_on_debug_batt;
+	bool			fake_chg_status_on_debug_batt;
 	int			default_icl_ua;
 	int			otg_cl_ua;
 	bool			uusb_apsd_rerun_done;
@@ -666,10 +684,15 @@ struct smb_charger {
 	int			cc_soc_ref;
 	int			last_cc_soc;
 	int			dr_mode;
+	int			term_vbat_uv;
 	int			usbin_forced_max_uv;
 	int			init_thermal_ua;
 	u32			comp_clamp_level;
 	bool			hvdcp3_standalone_config;
+	int			wls_icl_ua;
+	bool			dpdm_enabled;
+	bool			apsd_ext_timeout;
+	bool			qc3p5_detected;
 	bool			wdog_snarl_based_step_chg;
 
 	/* workaround flag */
@@ -701,7 +724,10 @@ struct smb_charger {
 	u32			irq_status;
 
 	/* wireless */
-	int			wireless_vout;
+	int			dcin_uv_count;
+	ktime_t			dcin_uv_last_time;
+	int			last_wls_vout;
+
 	
 	/* Configurable SW Thermal Throttling for DEBUG*/
 	int			*die_temp_rst_thresh;
@@ -782,6 +808,7 @@ irqreturn_t usb_source_change_irq_handler(int irq, void *data);
 irqreturn_t icl_change_irq_handler(int irq, void *data);
 irqreturn_t typec_state_change_irq_handler(int irq, void *data);
 irqreturn_t typec_attach_detach_irq_handler(int irq, void *data);
+irqreturn_t dcin_uv_irq_handler(int irq, void *data);
 irqreturn_t dc_plugin_irq_handler(int irq, void *data);
 irqreturn_t high_duty_cycle_irq_handler(int irq, void *data);
 irqreturn_t switcher_power_ok_irq_handler(int irq, void *data);
@@ -880,6 +907,10 @@ int smblib_get_prop_charger_temp(struct smb_charger *chg,
 int smblib_get_prop_die_health(struct smb_charger *chg);
 int smblib_get_prop_smb_health(struct smb_charger *chg);
 int smblib_get_prop_connector_health(struct smb_charger *chg);
+int smblib_get_prop_input_current_max(struct smb_charger *chg,
+				  union power_supply_propval *val);
+int smblib_set_prop_thermal_overheat(struct smb_charger *chg,
+			       int therm_overheat);
 int smblib_get_skin_temp_status(struct smb_charger *chg);
 int smblib_get_prop_vph_voltage_now(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -905,6 +936,7 @@ int smblib_set_prop_rechg_soc_thresh(struct smb_charger *chg,
 				const union power_supply_propval *val);
 void smblib_suspend_on_debug_battery(struct smb_charger *chg);
 int smblib_rerun_apsd_if_required(struct smb_charger *chg);
+void smblib_rerun_apsd(struct smb_charger *chg);
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_thermal_threshold(struct smb_charger *chg, u16 addr, int *val);

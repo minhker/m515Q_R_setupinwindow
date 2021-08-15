@@ -40,7 +40,7 @@
 #include "../battery_qc/include/sec_battery_qc.h"
 #include <linux/pmic-voter.h>
 #if defined(CONFIG_QPNP_SMB5)
-#if defined(CONFIG_SEC_A90Q_PROJECT) || defined(CONFIG_SEC_A70S_PROJECT)
+#if defined(CONFIG_SEC_A90Q_PROJECT) || defined(CONFIG_SEC_A70S_PROJECT) || defined(CONFIG_SEC_A70Q_PROJECT)
 #include "../power/supply/qcom_r1/smb5-lib.h"
 #else
 #include "../power/supply/qcom/smb5-lib.h"

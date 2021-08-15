@@ -19,10 +19,18 @@
 #include <linux/sensor/sensors_core.h>
 #include "sx9330_reg.h"
 #ifdef CONFIG_CCIC_NOTIFIER
+#if defined(CONFIG_USE_PDIC_LEGO)
+#include <linux/usb/typec/common/pdic_notifier.h>
+#else
 #include <linux/usb/typec/pdic_notifier.h>
+#endif /* CONFIG_USE_PDIC_LEGO */
 #endif
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+#if defined(CONFIG_USE_PDIC_LEGO)
+#include <linux/usb/typec/manager/usb_typec_manager_notifier.h>
+#else
 #include <linux/usb/typec/usb_typec_manager_notifier.h>
+#endif /* CONFIG_USE_PDIC_LEGO */
 #endif
 
 #ifdef TAG
@@ -59,7 +67,7 @@
 #if defined(CONFIG_FOLDER_HALL)
 #define HALLIC_PATH		"/sys/class/sec/sec_flip/flipStatus"
 #else
-#define HALLIC_PATH		"/sys/class/sec/sec_key/hall_detect"
+#define HALLIC_PATH		"/sys/class/sec/hall_ic/hall_detect"
 #endif
 
 struct sx9330_p {

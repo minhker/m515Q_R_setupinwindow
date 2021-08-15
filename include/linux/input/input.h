@@ -143,25 +143,22 @@
 
 #define MHZ_TO_BPS(mhz, w) ((uint64_t)mhz * 1000 * 1000 * w)
 
-#if defined(CONFIG_ARCH_SM8150)
-#define NUM_BUS_TABLE 12
-#define BUS_W 4	/* SM8150 DDR Voting('w' for DDR is 4) */
+#if defined(CONFIG_ARCH_ATOLL)
+#define NUM_BUS_TABLE 9
+#define BUS_W 4	/* SM7125 DDR Voting('w' for DDR is 4) */
 
 static int ab_ib_bus_vectors[NUM_BUS_TABLE][2] = {
-{0, 0},		/* 0 */
-{0, 200},	/* 1 */
-{0, 300},	/* 2 */
-{0, 451},	/* 3 */
-{0, 547},	/* 4 */
-{0, 681},	/* 5 */
-{0, 768},	/* 6 */
-{0, 1017},	/* 7 */
-{0, 1296},	/* 8 */
-{0, 1555},	/* 9 */
-{0, 1803},	/* 10 */
-{0, 2092}	/* 11 */
+{0, 0}, 	/* 0 */
+{0, 300},	/* 1 */
+{0, 451},	/* 2 */
+{0, 547},	/* 3 */
+{0, 768},	/* 4 */
+{0, 1017},	/* 5 */
+{0, 1555},	/* 6 */
+{0, 1804},	/* 7 */
+{0, 2133}	/* 8 */
 };
-#else	//CONFIG_ARCH_SM8150
+#else	//CONFIG_ARCH_ATOLL
 #define NUM_BUS_TABLE 1
 #define BUS_W 0
 

@@ -26,7 +26,7 @@ struct sec_audio_sysfs_data {
 	int (*set_jack_state)(int);
 	int (*get_mic_adc)(void);
 	int (*get_codec_id_state)(void);
-	int (*set_force_enable_antenna)(int);
+	int (*set_force_enable_antenna)(int value);
 	int (*get_antenna_state)(void);
 
 	/* bigdata */

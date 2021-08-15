@@ -441,7 +441,11 @@ int sec_nfc_i2c_probe(struct i2c_client *client)
 
 	if (of_get_property(dev->of_node, "sec-nfc,ldo_control", NULL)) {
 		if (pdata->nfc_pvdd != NULL) {
+#ifdef CONFIG_BATTERY_SAMSUNG
 			if (!lpcharge) {
+#else
+			if (1/*!lpcharge*/) {
+#endif
 				ret = sec_nfc_regulator_onoff(pdata, NFC_I2C_LDO_ON);
 				if (ret < 0)
 					NFC_LOG_ERR("max86900_regulator_on fail err = %d\n", ret);

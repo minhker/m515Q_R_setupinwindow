@@ -82,7 +82,11 @@ typedef enum {
 
 typedef enum {
 	PDIC_NOTIFY_EVENT_DETACH = 0,
+#if defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+	PDIC_NOTIFY_EVENT_PDIC_ATTACH,
+#else
 	PDIC_NOTIFY_EVENT_CCIC_ATTACH,
+#endif
 	PDIC_NOTIFY_EVENT_PD_SINK,
 	PDIC_NOTIFY_EVENT_PD_SOURCE,
 	PDIC_NOTIFY_EVENT_PD_SINK_CAP,
@@ -94,6 +98,15 @@ typedef enum {
 	PDIC_PD_REV_30,
 } pdic_pd_rev_t;
 
+#if defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+typedef struct _power_list {
+	int accept;
+	int max_voltage;
+	int min_voltage;
+	int max_current;
+	int apdo;
+} POWER_LIST;
+#else
 typedef struct _power_list {
 #if defined(CONFIG_PDIC_PD30)
 	int accept;
@@ -108,6 +121,7 @@ typedef struct _power_list {
 	int max_current;
 #endif
 } POWER_LIST;
+#endif
 
 typedef enum
 {
@@ -118,6 +132,19 @@ typedef enum
 	RP_CURRENT_ABNORMAL,
 } RP_CURRENT_LEVEL;
 
+#if defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+typedef struct _pdic_sink_status {
+	POWER_LIST power_list[MAX_PDO_NUM+1];
+	int available_pdo_num; // the number of available PDO
+	int selected_pdo_num; // selected number of PDO to change
+	int current_pdo_num; // current number of PDO
+	int pps_voltage;
+	int pps_current;
+	int request_apdo; // apdo for pps communication
+	int has_apdo; // pd source has apdo or not
+	unsigned int rp_currentlvl; // rp current level by pdic
+} PDIC_SINK_STATUS;
+#else
 typedef struct _pdic_sink_status {
 	POWER_LIST power_list[MAX_PDO_NUM+1];
 	int available_pdo_num; // the number of available PDO
@@ -132,6 +159,7 @@ typedef struct _pdic_sink_status {
 	pdic_pd_rev_t pd_rev; // specification revision
 	unsigned int rp_currentlvl; // rp current level by ccic
 } PDIC_SINK_STATUS;
+#endif
 
 struct pdic_notifier_struct {
 	pdic_notifier_event_t event;
@@ -141,7 +169,14 @@ struct pdic_notifier_struct {
 };
 
 extern void pdic_notifier_call(struct pdic_notifier_struct *value);
+
+#if defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+extern int bat_pdic_notifier_register(struct notifier_block *nb,
+		notifier_fn_t notifier, pdic_notifier_device_t listener);
+extern int bat_pdic_notifier_unregister(struct notifier_block *nb);
+#else
 extern int pdic_notifier_register(struct notifier_block *nb,
 		notifier_fn_t notifier, pdic_notifier_device_t listener);
 extern int pdic_notifier_unregister(struct notifier_block *nb);
+#endif
 #endif /* __BATTERY_NOTIFIER_H__ */

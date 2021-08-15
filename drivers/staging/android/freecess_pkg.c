@@ -23,18 +23,6 @@
 static atomic_t uid_rec[MAX_REC_UID];
 extern void binders_in_transcation(int uid);
 
-int pkg_stat_show(struct seq_file *m, void *v)
-{
-	int i;
-
-	for (i = 0; i < MAX_REC_UID; i++)
-		if (atomic_read(&uid_rec[i]))
-			seq_printf(m, "%d\t", atomic_read(&uid_rec[i]));
-	seq_printf(m, "\n");
-
-	return 0;
-}
-
 static void freecess_add_uid(uid_t uid)
 {
 	int i, j;
@@ -128,6 +116,7 @@ static void kfreecess_cfb_hook(void* data, unsigned int len)
 	struct kfreecess_msg_data* payload = (struct kfreecess_msg_data*)data;
 	int uid = payload->target_uid;
 
+	printk(KERN_INFO "cfb_target: uid = %d\n", uid);
 	binders_in_transcation(uid);
 }
 

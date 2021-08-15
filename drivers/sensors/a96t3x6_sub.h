@@ -83,8 +83,8 @@
 
 #define TK_FW_PATH_BIN 		"abov/abov_noble.fw"
 #define TK_FW_PATH_SDCARD	"/sdcard/Firmware/Gripsub/abov_fw.bin"
-#define HALL_PATH		"/sys/class/sec/sec_key/hall_detect"
-#define HALLIC_CERT_PATH	"/sys/class/sec/sec_key/certify_hall_detect"
+#define HALL_PATH		"/sys/class/sec/hall_ic/hall_detect"
+#define HALLIC_CERT_PATH	"/sys/class/sec/hall_ic/certify_hall_detect"
 #define HALL_CLOSE_STATE        1
 
 #define I2C_M_WR 0		/* for i2c */

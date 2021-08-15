@@ -44,8 +44,13 @@ extern unsigned int lpcharge;
 #include "tc3xxk.h"
 
 #if defined (CONFIG_VBUS_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #include <linux/vbus_notifier.h>
 #endif
 
@@ -99,7 +104,7 @@ extern unsigned int lpcharge;
 
 /* firmware */
 #define TC300K_FW_PATH_SDCARD	"/sdcard/tc3xxk.bin"
-#define HALL_PATH				"/sys/class/sec/sec_key/hall_detect"
+#define HALL_PATH				"/sys/class/sec/hall_ic/hall_detect"
 #define HALL_CLOSE_STATE		1
 
 #define TK_UPDATE_PASS		0

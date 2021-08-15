@@ -536,6 +536,15 @@ config CMA_DEBUGFS
 	help
 	  Turns on the DebugFS interface for CMA.
 
+config  CMA_ALLOW_WRITE_DEBUGFS
+	depends on CMA_DEBUGFS
+	bool "Allow CMA debugfs write"
+	help
+	  Say 'y' here to allow the CMA debugfs write.
+	  CMA debugfs write could be risky as it allows
+	  cma allocation, so it is not recommended to
+	  enable this option on any production device.
+
 config CMA_AREAS
 	int "Maximum count of the CMA areas"
 	depends on CMA
@@ -745,12 +754,12 @@ config MIGRATE_VMA_HELPER
 
 config HMM
 	bool
+	select MMU_NOTIFIER
 	select MIGRATE_VMA_HELPER
 
 config HMM_MIRROR
 	bool "HMM mirror CPU page table into a device page table"
 	depends on ARCH_HAS_HMM
-	select MMU_NOTIFIER
 	select HMM
 	help
 	  Select HMM_MIRROR if you want to mirror range of the CPU page table of a
@@ -841,6 +850,15 @@ config PROCESS_RECLAIM
 
 	 Any other value is ignored.
 
+config FORCE_ALLOC_FROM_DMA_ZONE
+	bool "Force certain memory allocators to always return ZONE_DMA memory"
+	depends on ZONE_DMA
+	help
+	  Ensure certain memory allocators always return memory from ZONE_DMA.
+	  This option helps ensure that clients who require ZONE_DMA memory are
+	  always using ZONE_DMA memory.
+
+	  If unsure, say "n".
 config INCREASE_MAXIMUM_SWAPPINESS
 	bool "Allow swappiness to be set up to 200"
 	depends on SWAP
@@ -859,6 +877,12 @@ config MMAP_READAROUND_LIMIT
 	  during the sluggish situation. Add the hard upper-limit for
 	  mmap readaround.
 
+config FAULT_AROUND_4KB
+	bool "Fault around bytes 4KB"
+	default n
+	help
+	  Reduce fault around bytes to 4KB
+
 config RBIN
 	bool "RBIN memory support"
 	default n
@@ -866,9 +890,21 @@ config RBIN
 	help
 	  This provides RBIN functionality in memory management.
 
+config PAGE_BOOST
+	bool "PAGE_BOOST feature"
+	depends on MMU
+	default n
+	help
+	  Enable this for PAGE_BOOST feature
+
+config PAGE_BOOST_RECORDING
+	bool "PAGE_BOOST recording feature"
+	depends on PAGE_BOOST
+	default y
+
 config LARGE_DIRTY_BUFFER
 	bool "Use large dirty_threshold value by enabling dirty_ratio"
-	default n
+	default y
 	help
 	 This config enables dirty_ratio/dirty_background_ratio,
 	 and it means large dirty_threshold value in 64bit architectures.
@@ -876,8 +912,10 @@ config LARGE_DIRTY_BUFFER
 
 config MAX_DIRTY_THRESH_PAGES
 	int "The upper bound of VM dirty_thresh value in number of pages"
-	default 0
+	default 25600
 	help
 	 This value is the upper bound of VM dirty-thresh. (0 means no limit.)
 	 It is only effective when dirty_ratio is used.
 	 (Setting dirty_bytes disables this option.)
+
+source "mm/sec_mm/Kconfig"

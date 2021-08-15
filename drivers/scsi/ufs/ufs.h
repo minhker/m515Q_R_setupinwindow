@@ -154,18 +154,25 @@ enum desc_header_offset {
 };
 
 enum ufs_desc_def_size {
+#if IS_ENABLED(CONFIG_BLK_TURBO_WRITE)
+	QUERY_DESC_DEVICE_DEF_SIZE		= 0x59,
+	QUERY_DESC_CONFIGURATION_DEF_SIZE	= 0xE2,
+	QUERY_DESC_UNIT_DEF_SIZE		= 0x2D,
+	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x58,
+#else
 	QUERY_DESC_DEVICE_DEF_SIZE		= 0x40,
 	QUERY_DESC_CONFIGURATION_DEF_SIZE	= 0x90,
 	QUERY_DESC_UNIT_DEF_SIZE		= 0x23,
+	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x48,
+#endif
 	QUERY_DESC_INTERCONNECT_DEF_SIZE	= 0x06,
-	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x44,
 	QUERY_DESC_POWER_DEF_SIZE		= 0x62,
 	/*
 	 * Max. 126 UNICODE characters (2 bytes per character) plus 2 bytes
 	 * of descriptor header.
 	 */
 	QUERY_DESC_STRING_MAX_SIZE		= 0xFE,
-	QUERY_DESC_HEALTH_MAX_SIZE		= 0x25
+	QUERY_DESC_HEALTH_DEF_SIZE		= 0x25
 };
 
 /* Unit descriptor parameters offsets in bytes*/
@@ -186,6 +193,9 @@ enum unit_desc_param {
 	UNIT_DESC_PARAM_PHY_MEM_RSRC_CNT	= 0x18,
 	UNIT_DESC_PARAM_CTX_CAPABILITIES	= 0x20,
 	UNIT_DESC_PARAM_LARGE_UNIT_SIZE_M1	= 0x22,
+#if IS_ENABLED(CONFIG_BLK_TURBO_WRITE)
+	UNIT_DESC_PARAM_WB_BUF_ALLOC_UNITS	= 0x29,
+#endif
 };
 
 /* Device descriptor parameters offsets in bytes*/
@@ -217,15 +227,16 @@ enum device_desc_param {
 	DEVICE_DESC_PARAM_UD_LEN		= 0x1B,
 	DEVICE_DESC_PARAM_RTT_CAP		= 0x1C,
 	DEVICE_DESC_PARAM_FRQ_RTC		= 0x1D,
+	DEVICE_DESC_PARAM_EXT_UFS_FEATURE_SUP   = 0x4F,
 };
 
-enum health_device_desc_param {
-	HEALTH_DEVICE_DESC_PARAM_LEN		= 0x0,
-	HEALTH_DEVICE_DESC_PARAM_IDN		= 0x1,
-	HEALTH_DEVICE_DESC_PARAM_INFO		= 0x2,
-	HEALTH_DEVICE_DESC_PARAM_LIFETIMEA	= 0x3,
-	HEALTH_DEVICE_DESC_PARAM_LIFETIMEB	= 0x4,
-	HEALTH_DEVICE_DESC_PARAM_RESERVED	= 0x5,
+/* Health descriptor parameters offsets in bytes*/
+enum health_desc_param {
+	HEALTH_DESC_PARAM_LEN			= 0x0,
+	HEALTH_DESC_PARAM_TYPE			= 0x1,
+	HEALTH_DESC_PARAM_EOL_INFO		= 0x2,
+	HEALTH_DESC_PARAM_LIFE_TIME_EST_A	= 0x3,
+	HEALTH_DESC_PARAM_LIFE_TIME_EST_B	= 0x4,
 };
 
 /*
@@ -267,7 +278,12 @@ enum power_desc_param_offset {
 
 /* Exception event mask values */
 enum {
+#if IS_ENABLED(CONFIG_BLK_TURBO_WRITE)
+	/* disable tw event [bit 5] as default */
+	MASK_EE_STATUS		= 0xFFDF,
+#else
 	MASK_EE_STATUS		= 0xFFFF,
+#endif
 	MASK_EE_URGENT_BKOPS	= (1 << 2),
 };
 
@@ -555,6 +571,9 @@ struct ufs_dev_desc {
 	u16 wmanufacturerid;
 	char model[MAX_MODEL_LEN + 1];
 	u16 wspecversion;
+#if IS_ENABLED(CONFIG_BLK_TURBO_WRITE)
+	u32 dextfeatsupport;
+#endif
 };
 
 #endif /* End of Header */

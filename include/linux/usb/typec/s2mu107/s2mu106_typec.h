@@ -698,10 +698,12 @@ struct s2mu106_usbpd_data {
     struct power_supply_desc ccic_desc;
     struct power_supply *psy_pm;
     struct power_supply *psy_ccic;
+	struct power_supply *psy_otg;
 	int cc1_val;
 	int cc2_val;
 	int cc_instead_of_vbus;
     struct regulator *regulator;
+	int first_goodcrc;
 };
 
 extern int s2mu106_usbpd_get_adc(void);
@@ -714,7 +716,7 @@ extern void s2mu106_vbus_turn_on_ctrl(struct s2mu106_usbpd_data *usbpd_data, boo
 extern int s2mu106_set_lpm_mode(struct s2mu106_usbpd_data *pdic_data);
 extern int s2mu106_set_normal_mode(struct s2mu106_usbpd_data *pdic_data);
 #if defined(CONFIG_CCIC_NOTIFIER)
-void s2mu106_ccic_event_work(void *data, int dest, int id, int attach, int event);
+void s2mu106_ccic_event_work(void *data, int dest, int id, int attach, int event, int sub);
 extern void select_pdo(int num);
 extern int sec_pd_select_pps(int num, int ppsVol, int ppsCur);
 extern int sec_pd_get_apdo_max_power(unsigned int *pdo_pos,

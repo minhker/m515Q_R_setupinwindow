@@ -53,12 +53,35 @@
 #define KDP_MOUNT_ART2 "/com.android.runtime@1"
 #define KDP_MOUNT_ART2_LEN strlen(KDP_MOUNT_ART2)
 
+#define KDP_MOUNT_CRYPT "/apex/com.android.conscrypt"
+#define KDP_MOUNT_CRYPT_LEN strlen(KDP_MOUNT_CRYPT)
+
+#define KDP_MOUNT_CRYPT2 "/com.android.conscrypt@"
+#define KDP_MOUNT_CRYPT2_LEN strlen(KDP_MOUNT_CRYPT2)
+
+#define KDP_MOUNT_ADBD "/apex/com.android.adbd"
+#define KDP_MOUNT_ADBD_LEN strlen(KDP_MOUNT_ADBD)
+
+#define KDP_MOUNT_ADBD2 "/com.android.adbd@"
+#define KDP_MOUNT_ADBD2_LEN strlen(KDP_MOUNT_ADBD2)
+
+#define KDP_MOUNT_RUNTIME "/apex/com.android.art"
+#define KDP_MOUNT_RUNTIME_LEN strlen(KDP_MOUNT_RUNTIME)
+
+#define KDP_MOUNT_RUNTIME2 "/com.android.art@1"
+#define KDP_MOUNT_RUNTIME2_LEN strlen(KDP_MOUNT_RUNTIME)
+
+#define KDP_MOUNT_SYSTEM_EXT "/system_ext" // system_ext
+#define KDP_MOUNT_SYSTEM_EXT_LEN strlen(KDP_MOUNT_SYSTEM_EXT)
+
+#define RUNTIME_ALLOW 2
 #define ART_ALLOW 2
 #endif /*CONFIG_RKP_NS_PROT */
 
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
 
+/* @fs.sec -- c4d165e8cb5ea1cc14cdedb9eab23efd642d4d5f -- */
 static unsigned int sys_umount_trace_status;
 
 static unsigned int m_hash_mask __read_mostly;
@@ -104,7 +127,11 @@ struct super_block *sys_sb __kdp_ro = NULL;
 struct super_block *odm_sb __kdp_ro = NULL;
 struct super_block *vendor_sb __kdp_ro = NULL;
 struct super_block *art_sb __kdp_ro = NULL;
+struct super_block *crypt_sb __kdp_ro = NULL;
+struct super_block *adbd_sb __kdp_ro = NULL;
+struct super_block *runtime_sb __kdp_ro = NULL;
 struct super_block *rootfs_sb __kdp_ro = NULL;
+struct super_block *sysext_sb __kdp_ro = NULL;
 static struct kmem_cache *vfsmnt_cache __read_mostly;
 /* Populate all superblocks required for NS Protection */
 
@@ -114,10 +141,15 @@ enum kdp_sb {
 	KDP_SB_SYS,
 	KDP_SB_VENDOR,
 	KDP_SB_ART,
+	KDP_SB_CRYPT,
+	KDP_SB_ADBD,
+	KDP_SB_RUNTIME,
+	KDP_SB_SYSEXT,
 	KDP_SB_MAX
 };
 
 int art_count = 0;
+int runtime_count = 0;
 #endif
 
 static DECLARE_RWSEM(namespace_sem);
@@ -2142,6 +2174,10 @@ static inline bool may_mandlock(void)
  * unixes. Our API is identical to OSF/1 to avoid making a mess of AMD
  */
 
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+#include <linux/io_record.h>
+#endif
+
 SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 {
 	struct path path;
@@ -2156,6 +2192,9 @@ SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 	if (!may_mount())
 		return -EPERM;
 
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	forced_init_record();
+#endif
 	if (!(flags & UMOUNT_NOFOLLOW))
 		lookup_flags |= LOOKUP_FOLLOW;
 
@@ -2186,6 +2225,16 @@ SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 dput_and_out:
 	/* we mustn't call path_put() as that would clear mnt_expiry_mark */
 	dput(path.dentry);
+	if (user_request && (!retval || (flags & MNT_FORCE))) {
+		/* filesystem needs to handle unclosed namespaces */
+#ifdef CONFIG_RKP_NS_PROT
+		if (mnt->mnt->mnt_sb->s_op->umount_end)
+			mnt->mnt->mnt_sb->s_op->umount_end(mnt->mnt->mnt_sb, flags);
+#else
+		if (mnt->mnt.mnt_sb->s_op->umount_end)
+			mnt->mnt.mnt_sb->s_op->umount_end(mnt->mnt.mnt_sb, flags);
+#endif
+	}
 	mntput_no_expire(mnt);
 	if (!retval)
 		sys_umount_trace_print(mnt, flags);
@@ -2203,16 +2252,6 @@ dput_and_out:
 
 		/* flush delayed_mntput_work to put sb->s_active */
 		flush_delayed_mntput_wait();
-	}
-	if (!retval || (flags & MNT_FORCE)) {
-		/* filesystem needs to handle unclosed namespaces */
-#ifdef CONFIG_RKP_NS_PROT
-		if (mnt->mnt->mnt_sb->s_op->umount_end)
-			mnt->mnt->mnt_sb->s_op->umount_end(mnt->mnt->mnt_sb, flags);
-#else
-		if (mnt->mnt.mnt_sb->s_op->umount_end)
-			mnt->mnt.mnt_sb->s_op->umount_end(mnt->mnt.mnt_sb, flags);
-#endif
 	}
 out:
 	return retval;
@@ -3107,6 +3146,26 @@ static void rkp_populate_sb(char *mount_point, struct vfsmount *mnt)
 	} else if (!vendor_sb &&
 		!strncmp(mount_point, KDP_MOUNT_VENDOR, KDP_MOUNT_VENDOR_LEN)) {
 		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&vendor_sb, (u64)mnt, KDP_SB_VENDOR, 0);
+	} else if (!crypt_sb &&
+		!strncmp(mount_point, KDP_MOUNT_CRYPT, KDP_MOUNT_CRYPT_LEN)) {
+		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&crypt_sb, (u64)mnt, KDP_SB_CRYPT, 0);
+	} else if (!crypt_sb &&
+		!strncmp(mount_point, KDP_MOUNT_CRYPT2, KDP_MOUNT_CRYPT2_LEN)) {
+		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&crypt_sb, (u64)mnt, KDP_SB_CRYPT, 0);
+	} else if (!adbd_sb &&
+		!strncmp(mount_point, KDP_MOUNT_ADBD, KDP_MOUNT_ADBD_LEN)) {
+		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&adbd_sb, (u64)mnt, KDP_SB_ADBD, 0);
+	} else if (!adbd_sb &&
+		!strncmp(mount_point, KDP_MOUNT_ADBD2, KDP_MOUNT_ADBD2_LEN)) {
+		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&adbd_sb, (u64)mnt, KDP_SB_ADBD, 0);
+	} else if (!runtime_sb &&
+		!strncmp(mount_point, KDP_MOUNT_RUNTIME, KDP_MOUNT_RUNTIME_LEN)) {
+		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&runtime_sb, (u64)mnt, KDP_SB_RUNTIME, 0);
+	} else if ((runtime_count < RUNTIME_ALLOW) &&
+		!strncmp(mount_point, KDP_MOUNT_RUNTIME2, KDP_MOUNT_RUNTIME2_LEN)) {
+		if (runtime_count)
+			uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&runtime_sb, (u64)mnt, KDP_SB_RUNTIME, 0);
+		runtime_count++;
 	} else if (!art_sb &&
 		!strncmp(mount_point, KDP_MOUNT_ART, KDP_MOUNT_ART_LEN - 1)) {
 		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&art_sb, (u64)mnt, KDP_SB_ART, 0);
@@ -3115,6 +3174,9 @@ static void rkp_populate_sb(char *mount_point, struct vfsmount *mnt)
 		if (art_count)
 			uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&art_sb, (u64)mnt, KDP_SB_ART, 0);
 		art_count++;
+	} else if (!sysext_sb &&
+		!strncmp(mount_point, KDP_MOUNT_SYSTEM_EXT, KDP_MOUNT_SYSTEM_EXT_LEN)) {
+		uh_call(UH_APP_RKP, RKP_KDP_X56, (u64)&sysext_sb, (u64)mnt, KDP_SB_SYSEXT, 0);
 	}
 }
 #endif /*CONFIG_RKP_NS_PROT*/
@@ -3166,7 +3228,8 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 		return -ENOMEM;
 	}
 	dir_name = dentry_path_raw(path->dentry, buf, PATH_MAX);
-	if (!sys_sb || !odm_sb || !vendor_sb || !art_sb || (art_count < ART_ALLOW)) 
+	if (!sys_sb || !odm_sb || !vendor_sb || !art_sb || !crypt_sb || !adbd_sb ||!runtime_sb
+		|| !(runtime_count < RUNTIME_ALLOW) ||!(art_count < ART_ALLOW) || !sysext_sb)
 		rkp_populate_sb(dir_name, mnt);
 	kfree(buf);
 #endif
@@ -3376,7 +3439,7 @@ void *copy_mount_options(const void __user * data)
 	 * the remainder of the page.
 	 */
 	/* copy_from_user cannot cross TASK_SIZE ! */
-	size = TASK_SIZE - (unsigned long)data;
+	size = TASK_SIZE - (unsigned long)untagged_addr(data);
 	if (size > PAGE_SIZE)
 		size = PAGE_SIZE;
 
@@ -3861,8 +3924,8 @@ SYSCALL_DEFINE2(pivot_root, const char __user *, new_root,
 	/* make certain new is below the root */
 	if (!is_path_reachable(new_mnt, new.dentry, &root))
 		goto out4;
-	root_mp->m_count++; /* pin it so it won't go away */
 	lock_mount_hash();
+	root_mp->m_count++; /* pin it so it won't go away */
 	detach_mnt(new_mnt, &parent_path);
 	detach_mnt(root_mnt, &root_parent);
 #ifdef CONFIG_RKP_NS_PROT

@@ -263,14 +263,15 @@ static int abc_hub_probe(struct platform_device *pdev)
 
 		if (!pdata) {
 			dev_err(&pdev->dev, "Failed to allocate platform data\n");
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto out;
 		}
 
 		pdev->dev.platform_data = pdata;
 		ret = abc_hub_parse_dt(&pdev->dev);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to parse dt data\n");
-			return ret;
+			goto err_parse_dt;
 		}
 
 		pr_info("%s: parse dt done\n", __func__);
@@ -280,13 +281,16 @@ static int abc_hub_probe(struct platform_device *pdev)
 
 	if (!pdata) {
 		dev_err(&pdev->dev, "There are no platform data\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	pinfo = kzalloc(sizeof(*pinfo), GFP_KERNEL);
 
-	if (!pinfo)
-		return -ENOMEM;
+	if (!pinfo) {
+		ret = -ENOMEM;
+		goto err_alloc_pinfo;
+	}
 #ifdef CONFIG_DRV_SAMSUNG
 	pinfo->dev = sec_device_create(0, pinfo, "sec_abc_hub");
 #else
@@ -295,8 +299,9 @@ static int abc_hub_probe(struct platform_device *pdev)
 	if (IS_ERR(pinfo->dev)) {
 		pr_err("%s Failed to create device(sec_abc_hub)!\n", __func__);
 		ret = -ENODEV;
-		goto out;
+		goto err_create_device;
 	}
+	abc_hub_dev = pinfo->dev;
 
 	ret = device_create_file(pinfo->dev, &dev_attr_enable);
 	if (ret) {
@@ -314,7 +319,6 @@ static int abc_hub_probe(struct platform_device *pdev)
 	}
 #endif
 
-	abc_hub_dev = pinfo->dev;
 	pinfo->pdata = pdata;
 
 	platform_set_drvdata(pdev, pinfo);
@@ -352,10 +356,13 @@ err_create_abc_hub_enable_sysfs:
 #else
 	device_destroy(sec_class, abc_hub_dev->devt);
 #endif
-out:
+err_create_device:
 	kfree(pinfo);
+err_alloc_pinfo:
+err_parse_dt:
 	devm_kfree(&pdev->dev, pdata);
-
+	pdev->dev.platform_data =  NULL;
+out:
 	return ret;
 }
 

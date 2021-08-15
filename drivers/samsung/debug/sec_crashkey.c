@@ -98,7 +98,8 @@ static struct event_state crashkey_user_state = {
 	.received_pattern = received_user_pattern,
 	.nr_pattern = ARRAY_SIZE(crashkey_user_pattern),
 	.msg = UPLOAD_MSG_USER_CRASH_KEY,
-	.interval = 7 * HZ,
+	/* TODO: set this value to '0' to ignore 'ratelimit' */
+	.interval = 19 * HZ,	/* COVID-19 */
 };
 
 static struct event_state *key_event_state;
@@ -130,16 +131,19 @@ static int sec_crashkey_notifier_call(struct notifier_block *this,
 	key_event_state->received_pattern[idx].down = !!param->down;
 	key_event_state->sequence++;
 
-	if (!__ratelimit(&(key_event_state->rs))) {
-		if (!__crashkey_test_pattern(key_event_state->nr_pattern)) {
+	if (__crashkey_test_pattern(key_event_state->sequence))
+		goto clear_state;
+
+	if (!key_event_state->interval ||
+	    !__ratelimit(&(key_event_state->rs))) {
+		if (key_event_state->sequence == key_event_state->nr_pattern) {
 #ifdef CONFIG_SEC_USER_RESET_DEBUG
 			sec_debug_store_extc_idx(false);
 #endif
-			panic(key_event_state->msg);
-		} else
+			panic("%s", key_event_state->msg);
+		} else if (key_event_state->interval)
 			goto clear_state;
-	} else if (__crashkey_test_pattern(key_event_state->sequence))
-		goto clear_state;
+	}
 
 	return NOTIFY_DONE;
 

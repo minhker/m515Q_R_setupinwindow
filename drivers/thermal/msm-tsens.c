@@ -26,10 +26,20 @@
 
 LIST_HEAD(tsens_device_list);
 
-#if CONFIG_SEC_PM_DEBUG
+#if defined(CONFIG_SEC_PM)
 static struct delayed_work ts_print_work;
+/* SM7150,SM7125 */
+#if defined (CONFIG_ARCH_SEC_SM7150) || defined (CONFIG_ARCH_ATOLL)
+struct tsens_device *ts_tmdev0 = NULL;
+struct tsens_device *ts_tmdev1 = NULL;
+static int ts_print_num_a[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}; //cpu0-7 cpuss0, gpuss0
+static int ts_print_num_b[] = {0, 3, 5, 8}; // aoss1, ddr, camera, npu
+/* SM6150 */
+#else 
 struct tsens_device *ts_tmdev;
 static int ts_print_num[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+#endif
+
 static int ts_print_count;
 #endif
 
@@ -103,6 +113,9 @@ static const struct of_device_id tsens_table[] = {
 	},
 	{	.compatible = "qcom,qcs405-tsens",
 		.data = &data_tsens14xx_405,
+	},
+	{	.compatible = "qcom,mdm9607-tsens",
+		.data = &data_tsens14xx_9607,
 	},
 	{}
 };
@@ -195,7 +208,7 @@ static int get_device_tree_data(struct platform_device *pdev,
 		}
 	}
 	tmdev->tsens_reinit_wa =
-		of_property_read_bool(of_node, "tsens-reinit-wa");
+			of_property_read_bool(of_node, "tsens-reinit-wa");
 
 	return rc;
 }
@@ -274,17 +287,41 @@ static void __ref ts_print(struct work_struct *work)
 	int added = 0, ret = 0;
 	char buffer[500] = { 0, };
 
-	ts_sensor.tmdev = ts_tmdev;
-
 	ret = snprintf(buffer + added, sizeof(buffer) - added, "tsens");
 	added += ret;
-	for (i = 0; i < (sizeof(ts_print_num) / sizeof(int)); i++) {
-		ts_sensor = ts_tmdev->sensor[ts_print_num[i]];
+/* SM7150,SM7125 */
+#if defined (CONFIG_ARCH_SEC_SM7150) || defined (CONFIG_ARCH_ATOLL)
+	/* print tsens0 (controller 0) */
+	ts_sensor.tmdev = ts_tmdev0;
+	for (i = 0; i < (sizeof(ts_print_num_a) / sizeof(int)); i++) {
+		ts_sensor = ts_tmdev0->sensor[ts_print_num_a[i]];
 		tsens_get_temp(&ts_sensor, &temp);
 		ret = snprintf(buffer + added, sizeof(buffer) - added,
-				   "[%d:%d]", ts_print_num[i], temp/100);
+				   "[%d:%d]", ts_print_num_a[i], temp/100);
 		added += ret;
 	}
+
+	/* print tsens0 (controller 1) */
+	ts_sensor.tmdev = ts_tmdev1;
+	for (i = 0; i < (sizeof(ts_print_num_b) / sizeof(int)); i++) {
+		ts_sensor = ts_tmdev1->sensor[ts_print_num_b[i]];
+		tsens_get_temp(&ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+					   "[%d:%d]", ts_print_num_b[i] + 15, temp/100);
+		added += ret;
+	}
+/* SM6150 */
+#else 
+	ts_sensor.tmdev = ts_tmdev;
+		for (i = 0; i < (sizeof(ts_print_num) / sizeof(int)); i++) {
+			ts_sensor = ts_tmdev->sensor[ts_print_num[i]];
+			tsens_get_temp(&ts_sensor, &temp);
+			ret = snprintf(buffer + added, sizeof(buffer) - added,
+				   "[%d:%d]", ts_print_num[i], temp/100);
+			added += ret;
+		}
+#endif
+
 	pr_info("%s\n", buffer);
 
 	schedule_delayed_work(&ts_print_work, HZ * 5);
@@ -374,12 +411,28 @@ int tsens_tm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, tmdev);
 
 #if defined(CONFIG_SEC_PM)
+/* SM7150 SM7125 */
+#if defined (CONFIG_ARCH_SEC_SM7150) || defined (CONFIG_ARCH_ATOLL)
+	if (!strncmp(tmdev->pdev->name, "c222000", 7)) {
+		ts_tmdev0 = tmdev;
+	} else if (!strncmp(tmdev->pdev->name, "c223000", 7)) {
+		ts_tmdev1 = tmdev;
+	}
+
+	if (ts_print_count == 0 && ts_tmdev1 != NULL) {
+		INIT_DELAYED_WORK(&ts_print_work, ts_print);
+		schedule_delayed_work(&ts_print_work, 0);
+		ts_print_count++;
+	}
+/* SM6150 */
+#else 
 	if (ts_print_count == 0) {
 		ts_tmdev = tmdev;
 		INIT_DELAYED_WORK(&ts_print_work, ts_print);
 		schedule_delayed_work(&ts_print_work, 0);
 		ts_print_count++;
 	}
+#endif
 #endif
 
 	return rc;

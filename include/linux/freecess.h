@@ -68,11 +68,12 @@ struct kfreecess_msg_data
 		unsigned int version;   // |--4bits version--|----28bits caller_pid----|
 	};
 	int target_uid;
-	int flag;		//MOD_SIG,MOD_BINDER,MOD_CFB
+	int flag;		//MOD_SIG,MOD_BINDER
 	int code;
 	char rpcname[INTERFACETOKEN_BUFF_SIZE];
 	pkg_info_t pkg_info;	//MOD_PKG
 };
+
 
 extern int freecess_fw_version;    // record freecess framework version
 
@@ -84,6 +85,5 @@ int pkg_report(int target_uid);
 int cfb_report(int target_uid, const char *reason);
 int register_kfreecess_hook(int mod, freecess_hook hook);
 int unregister_kfreecess_hook(int mod);
-int pkg_stat_show(struct seq_file *m, void *v);
 int thread_group_is_frozen(struct task_struct* task);
 #endif

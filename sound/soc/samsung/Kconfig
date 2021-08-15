@@ -224,4 +224,4 @@ config SND_SOC_SAMSUNG_MBHC_SUPPORT
 config SND_SOC_SAMSUNG_JACK
 	tristate "earjack sysfs support for Samsung MBHC"
 	help
-	  Say Y here to enable earjack sysfs support for Samsung MBHC.
+	  Say Y here to enable earjack sysfs support for Samsung MBHC

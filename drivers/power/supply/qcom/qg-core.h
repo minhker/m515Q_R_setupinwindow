@@ -82,6 +82,7 @@ struct qg_dt {
 	bool			fvss_enable;
 	bool			multi_profile_load;
 	bool			tcss_enable;
+	bool			bass_enable;
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
 	bool			fake_temp;	
 #endif
@@ -163,6 +164,7 @@ struct qpnp_qg {
 	bool			force_soc;
 	bool			fvss_active;
 	bool			tcss_active;
+	bool			bass_active;
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
 #if defined(CONFIG_ENG_BATTERY_CONCEPT)
 	int			batt_test_batt_temp;
@@ -185,6 +187,8 @@ struct qpnp_qg {
 	int			ibat_tcss_entry;
 	int			soc_tcss;
 	int			tcss_entry_count;
+	int			max_fcc_limit_ma;
+	int			bsoc_bass_entry;
 	u32			fifo_done_count;
 	u32			wa_flags;
 	u32			seq_no;

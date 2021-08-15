@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -203,7 +203,7 @@ static int panic_wdog_handler(struct notifier_block *this,
 {
 	struct msm_watchdog_data *wdog_dd = container_of(this,
 				struct msm_watchdog_data, panic_blk);
-	if (panic_timeout == 0) {
+	if (panic_timeout == 0 || crash_kexec_post_notifiers) {
 		__raw_writel(0, wdog_dd->base + WDT0_EN);
 		/* Make sure watchdog is enabled before notifying the caller */
 		mb();
@@ -260,7 +260,6 @@ static ssize_t wdog_disable_set(struct device *dev,
 	int ret;
 	u8 disable;
 	struct msm_watchdog_data *wdog_dd = dev_get_drvdata(dev);
-	struct scm_desc desc = {0};
 
 	ret = kstrtou8(buf, 10, &disable);
 	if (ret) {
@@ -275,11 +274,17 @@ static ssize_t wdog_disable_set(struct device *dev,
 			return count;
 		}
 		disable = 1;
+		if (!is_scm_armv8()) {
+			ret = scm_call(SCM_SVC_BOOT, SCM_SVC_SEC_WDOG_DIS,
+				       &disable, sizeof(disable), NULL, 0);
+		} else {
+			struct scm_desc desc = {0};
 
-		desc.args[0] = 1;
-		desc.arginfo = SCM_ARGS(1);
-		ret = scm_call2(SCM_SIP_FNID(SCM_SVC_BOOT,
-						SCM_SVC_SEC_WDOG_DIS), &desc);
+			desc.args[0] = 1;
+			desc.arginfo = SCM_ARGS(1);
+			ret = scm_call2(SCM_SIP_FNID(SCM_SVC_BOOT,
+					SCM_SVC_SEC_WDOG_DIS), &desc);
+		}
 		if (ret) {
 			dev_err(wdog_dd->dev,
 					"Failed to deactivate secure wdog\n");
@@ -573,6 +578,9 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	nanosec_rem = do_div(wdog_dd->last_pet, 1000000000);
 	dev_info(wdog_dd->dev, "Watchdog last pet at %lu.%06lu\n",
 			(unsigned long) wdog_dd->last_pet, nanosec_rem / 1000);
+	dev_info(wdog_dd->dev, "Watchdog pet_timer on cpu%d, expires = 0x%llx, jiffies = 0x%llx\n",
+			get_cpu_where_timer_on(&wdog_dd->pet_timer), wdog_dd->pet_timer.expires, jiffies);
+
 	if (wdog_dd->do_ipi_ping)
 		dump_cpu_alive_mask(wdog_dd);
 	emerg_pet_watchdog();
@@ -580,9 +588,6 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	sched_show_task(wdog_dd->watchdog_task);
 	/* send stop IPI to see what happens on other cores */
 	smp_send_stop();
-
-	dev_info(wdog_dd->dev, "Watchdog pet_timer expires = 0x%llx, jiffies = 0x%llx\n",
-			wdog_dd->pet_timer.expires, jiffies);
 
 	msm_trigger_wdog_bite();
 	panic("Failed to cause a watchdog bite! - Falling back to kernel panic!");

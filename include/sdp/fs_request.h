@@ -46,37 +46,40 @@ typedef struct sdp_fs_command {
 	int req_id;
 
 	int opcode;
-    int user_id;
-    int part_id;
-    unsigned long ino;
-    int pid;
+	int user_id;
+	int part_id;
+	unsigned long ino;
+	int pid;
+	int err;
 }sdp_fs_command_t;
 
 extern int sdp_fs_request(sdp_fs_command_t *sdp_req, fs_request_cb_t callback);
 
 static inline sdp_fs_command_t *sdp_fs_command_alloc(int opcode, int pid,
-        int userid, int partid, unsigned long ino, gfp_t gfp) {
-    sdp_fs_command_t *cmd;
+		int userid, int partid, unsigned long ino, int err, gfp_t gfp)
+{
+	sdp_fs_command_t *cmd;
 
-    cmd = kmalloc(sizeof(sdp_fs_command_t), gfp);
+	cmd = kmalloc(sizeof(sdp_fs_command_t), gfp);
 
-    if(cmd == NULL) {
+	if (cmd == NULL) {
 	printk(KERN_ERR "sdp_fs_command_alloc is failed\n");
 	return NULL;
-    }
+	}
 
-    cmd->opcode = opcode;
-    cmd->pid = pid;
-    cmd->user_id = userid;
-    cmd->part_id = partid;
-    cmd->ino = ino;
+	cmd->opcode = opcode;
+	cmd->pid = pid;
+	cmd->user_id = userid;
+	cmd->part_id = partid;
+	cmd->ino = ino;
+	cmd->err = err;
 
-    return cmd;
+	return cmd;
 }
 
 static inline void sdp_fs_command_free(sdp_fs_command_t *cmd)
 {
-    kzfree(cmd);
+	kzfree(cmd);
 }
 
 #endif /* FS_REQUEST_H_ */

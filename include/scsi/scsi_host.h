@@ -340,6 +340,7 @@ struct scsi_host_template {
 #define SCSI_ADAPTER_RESET	1
 #define SCSI_FIRMWARE_RESET	2
 
+        void (* tw_ctrl)(struct scsi_device *, int);
 
 	/*
 	 * Name of proc directory
@@ -666,9 +667,6 @@ struct Scsi_Host {
 	/* The controller does not support WRITE SAME */
 	unsigned no_write_same:1;
 
-	/* Inline encryption support? */
-	unsigned inlinecrypt_support:1;
-
 	unsigned use_blk_mq:1;
 	unsigned use_cmd_list:1;
 
@@ -837,6 +835,9 @@ static inline int scsi_host_scan_allowed(struct Scsi_Host *shost)
 
 extern void scsi_unblock_requests(struct Scsi_Host *);
 extern void scsi_block_requests(struct Scsi_Host *);
+#if IS_ENABLED(CONFIG_BLK_TURBO_WRITE)
+extern void scsi_reset_tw_state(struct Scsi_Host *);
+#endif
 
 struct class_container;
 

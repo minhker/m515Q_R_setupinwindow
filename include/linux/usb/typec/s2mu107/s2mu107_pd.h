@@ -40,7 +40,7 @@
 #if defined(CONFIG_SEC_FACTORY)
 #define tSenderResponse		(1100)	/* for UCT300 */
 #else
-#define tSenderResponse		(25)	/* 24~30ms */
+#define tSenderResponse		(30)	/* 30ms */
 #endif
 #define tSenderResponseSRC	(300)	/* 1000 ms */
 #define tSendSourceCap		(10)	/* 1~2 s */
@@ -452,6 +452,11 @@ enum  {
 	S2MU107_USBPD_IP,
 };
 
+enum usbpd_otg_voltage {
+	OTG_5V = 0,
+	OTG_9V = 1,
+};
+
 typedef union {
 	u32 object;
 	u16 word[2];
@@ -470,6 +475,12 @@ typedef union {
 		unsigned:30;
 		unsigned supply_type:2;
 	} power_data_obj_supply_type;
+
+	struct {
+		unsigned:28;
+		unsigned object_position:3;
+		unsigned:1;
+	} request_data_obj_pos_type;
 
 	struct {
 		unsigned max_current:10;        /* 10mA units */
@@ -703,11 +714,12 @@ typedef struct usbpd_phy_ops {
 	bool   (*poll_status)(void *);
 	void   (*driver_reset)(void *);
 	int    (*set_otg_control)(void *, int);
+	void    (*set_otg_voltage)(void *, int);
 	void    (*get_vbus_short_check)(void *, bool *);
 	void    (*pd_vbus_short_check)(void *);
 	int    (*set_cc_control)(void *, int);
 	void    (*pr_swap)(void *, int);
-	int    (*vbus_on_check)(void *);
+	int    (*vbus_on_check)(void *, int);
 	int		(*get_side_check)(void *_data);
 	int    (*set_rp_control)(void *, int);
 #if defined(CONFIG_TYPEC)
@@ -850,7 +862,8 @@ struct usbpd_data {
 	struct protocol_data	protocol_rx;
 	struct policy_data	policy;
 	msg_header_type		source_msg_header;
-	data_obj_type           source_data_obj;
+	data_obj_type           source_data_obj[2];
+	data_obj_type           source_data_obj_thermal;
 	msg_header_type		sink_msg_header;
 	data_obj_type           sink_data_obj[2];
 	data_obj_type		source_request_obj;
@@ -872,6 +885,11 @@ struct usbpd_data {
 
 	struct wake_lock	policy_wake;
 	int					ip_num;
+	
+	int					thermal_state;
+	int					thermal_swap;
+	int					select_status;
+	int					thermal_unsupport;
 };
 
 typedef struct {
@@ -1136,6 +1154,8 @@ static inline struct usbpd_data *manager_to_usbpd(struct usbpd_manager_data *man
 extern int usbpd_init(struct device *dev, void *phy_driver_data);
 extern void usbpd_init_policy(struct usbpd_data *);
 
+extern void usbpd_manager_9V_pdo_select(struct usbpd_data *pd_data, int en);
+extern void usbpd_manager_change_thermal_source_cap(int enable, int max_cur);
 extern void  usbpd_init_manager_val(struct usbpd_data *);
 extern int  usbpd_init_manager(struct usbpd_data *);
 extern void usbpd_manager_plug_attach(struct device *, muic_attached_dev_t);

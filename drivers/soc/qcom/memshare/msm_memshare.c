@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,7 +60,7 @@ struct memshare_driver {
 	struct mutex mem_share;
 	struct mutex mem_free;
 	struct work_struct memshare_init_work;
-#ifdef CONFIG_SEC_BSP
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
 	struct memshare_rd_device *memshare_rd_dev;
 #endif
 };
@@ -123,15 +123,13 @@ static int mem_share_configure_ramdump(int client)
 	return 0;
 }
 
-#ifdef CONFIG_SEC_BSP
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
 struct memshare_rd_device {
 	char name[256];
 	struct miscdevice device;
 	unsigned long address;
-	//void *v_address;
 	unsigned long size;
 	unsigned int data_ready;
-	//struct dma_attrs attrs;
 };
 
 static void memshare_unset_nhlos_permission(phys_addr_t addr, u32 size)
@@ -294,7 +292,6 @@ phys_addr_t p_addr, u32 size, void *v_addr)
 	int rc = 0;
 
 	rd_dev->address = p_addr;
-	//rd_dev->v_address = v_addr;
 	rd_dev->size = size;
 	rd_dev->data_ready = 1;
 
@@ -395,9 +392,7 @@ static void initialize_client(void)
 		memblock[i].hyp_mapping = 0;
 		memblock[i].file_created = 0;
 	}
-//#ifndef CONFIG_SEC_BSP
 	attrs |= DMA_ATTR_NO_KERNEL_MAPPING | DMA_ATTR_SKIP_ZEROING;
-//#endif
 }
 
 /*
@@ -600,11 +595,9 @@ static int modem_notifier_cb(struct notifier_block *this, unsigned long code,
 		bootup_request++;
 		break;
 
-#ifdef CONFIG_SEC_BSP
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_err("memshare: Modem shutdown has happened\n");
-//		memshare_unset_nhlos_permission(memsh_drv->memshare_rd_dev->address,
-//				memsh_drv->memshare_rd_dev->size);
 		memsh_drv->memshare_rd_dev->data_ready = 0;
 		break;
 #endif
@@ -708,12 +701,14 @@ static void handle_alloc_generic_req(struct qmi_handle *handle,
 		memblock[client_id].allotted = 1;
 		memblock[client_id].size = alloc_req->num_bytes;
 		memblock[client_id].peripheral = alloc_req->proc_id;
-#ifdef CONFIG_SEC_BSP
-		memshare_rd_set(memsh_drv->memshare_rd_dev, memblock[client_id].phy_addr,
-				alloc_req->num_bytes, memblock[client_id].virtual_addr);
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
+		if (client_id == DHMS_MEM_CLIENT_MODEM_V01) {
+			memshare_rd_set(memsh_drv->memshare_rd_dev, memblock[client_id].phy_addr,
+							alloc_req->num_bytes, memblock[client_id].virtual_addr);
+		}
 #endif
 	}
-		dev_dbg(memsh_child->dev,
+	dev_dbg(memsh_child->dev,
 		"memshare_alloc: free memory count for client id: %d = %d\n",
 		memblock[client_id].client_id, memblock[client_id].free_memory);
 
@@ -816,11 +811,18 @@ static void handle_free_generic_req(struct qmi_handle *handle,
 	} else {
 		free_resp.resp.result = QMI_RESULT_SUCCESS_V01;
 		free_resp.resp.error = QMI_ERR_NONE_V01;
-#ifdef CONFIG_SEC_BSP
-		memshare_unset_nhlos_permission(memblock[client_id].phy_addr,
-				memsh_drv->memshare_rd_dev->size);
-		memblock[client_id].hyp_mapping = 0;
-		memsh_drv->memshare_rd_dev->data_ready = 0;
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
+		if(client_id == DHMS_MEM_CLIENT_MODEM_V01){
+			memshare_unset_nhlos_permission(memblock[client_id].phy_addr,
+					memsh_drv->memshare_rd_dev->size);
+			memblock[client_id].hyp_mapping = 0;
+			memsh_drv->memshare_rd_dev->data_ready = 0;
+		}
+		else{
+			dev_err(memsh_child->dev,
+					"memshare_free: cannot unset nhlos permission for client_id: %d\n",
+					client_id);
+		}
 #endif
 	}
 
@@ -867,9 +869,9 @@ static void handle_query_size_req(struct qmi_handle *handle,
 		return;
 	}
 
-	if (memblock[client_id].size) {
+	if (memblock[client_id].init_size) {
 		query_resp->size_valid = 1;
-		query_resp->size = memblock[client_id].size;
+		query_resp->size = memblock[client_id].init_size;
 	} else {
 		query_resp->size_valid = 1;
 		query_resp->size = 0;
@@ -910,21 +912,21 @@ static struct qmi_msg_handler qmi_memshare_handlers[] = {
 		.type = QMI_REQUEST,
 		.msg_id = MEM_ALLOC_GENERIC_REQ_MSG_V01,
 		.ei = mem_alloc_generic_req_msg_data_v01_ei,
-		.decoded_size = MEM_ALLOC_REQ_MAX_MSG_LEN_V01,
+		.decoded_size = sizeof(struct mem_alloc_generic_req_msg_v01),
 		.fn = handle_alloc_generic_req,
 	},
 	{
 		.type = QMI_REQUEST,
 		.msg_id = MEM_FREE_GENERIC_REQ_MSG_V01,
 		.ei = mem_free_generic_req_msg_data_v01_ei,
-		.decoded_size = MEM_FREE_REQ_MAX_MSG_LEN_V01,
+		.decoded_size = sizeof(struct mem_free_generic_req_msg_v01),
 		.fn = handle_free_generic_req,
 	},
 	{
 		.type = QMI_REQUEST,
 		.msg_id = MEM_QUERY_SIZE_REQ_MSG_V01,
 		.ei = mem_query_size_req_msg_data_v01_ei,
-		.decoded_size = MEM_QUERY_MAX_MSG_LEN_V01,
+		.decoded_size = sizeof(struct mem_query_size_req_msg_v01),
 		.fn = handle_query_size_req,
 	},
 };
@@ -1073,7 +1075,7 @@ static int memshare_child_probe(struct platform_device *pdev)
 	else if (strcmp(name, "wcnss") == 0)
 		memblock[num_clients].peripheral = DHMS_MEM_PROC_WCNSS_V01;
 
-	memblock[num_clients].size = size;
+	memblock[num_clients].init_size = size;
 	memblock[num_clients].client_id = client_id;
 
   /*
@@ -1091,6 +1093,7 @@ static int memshare_child_probe(struct platform_device *pdev)
 				rc);
 			return rc;
 		}
+		memblock[num_clients].size = size;
 		memblock[num_clients].allotted = 1;
 		shared_hyp_mapping(num_clients);
 	}
@@ -1153,7 +1156,7 @@ static int memshare_probe(struct platform_device *pdev)
 	subsys_notif_register_notifier("modem", &nb);
 	dev_dbg(memsh_child->dev, "memshare: Memshare inited\n");
 
-#ifdef CONFIG_SEC_BSP
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
 	drv->memshare_rd_dev = create_memshare_rd_device(MEMSHARE_DEV_NAME,
 								&pdev->dev);
 	if (!drv->memshare_rd_dev) {
@@ -1177,7 +1180,7 @@ static int memshare_remove(struct platform_device *pdev)
 	kfree(mem_share_svc_handle);
 	destroy_workqueue(mem_share_svc_workqueue);
 
-#ifdef CONFIG_SEC_BSP
+#ifdef CONFIG_CP_DYNAMIC_MEM_RESERVE
 	destroy_memshare_rd_device(memsh_drv->memshare_rd_dev);
 #endif
 

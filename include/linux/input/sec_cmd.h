@@ -10,6 +10,7 @@
 #include <linux/stat.h>
 #include <linux/err.h>
 #include <linux/input.h>
+#include <linux/sched/clock.h>
 #if defined(CONFIG_SEC_SYSFS)
 #include <linux/sec_sysfs.h>
 #elif defined(CONFIG_DRV_SAMSUNG)

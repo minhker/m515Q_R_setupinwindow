@@ -379,6 +379,17 @@ enum s2mu106_muic_registers {
 
 #define BCD_RESCAN_BCD_RESCAN_MASK		(0x1 << BCD_RESCAN_BCD_RESCAN_SHIFT)
 
+/* S2MU106 MUIC AFC_OTP3 Register (0x68) */
+#define AFC_COMP_REF_SEL_SHIFT		5
+#define AFC_HCOMP_REF_SEL_SHIFT		0
+
+#define AFC_COMP_REF_SEL_MASK               (0x7 << AFC_COMP_REF_SEL_SHIFT)
+#define AFC_COMP_REF_SEL_0p3V_MASK          (0x4 << AFC_COMP_REF_SEL_SHIFT)
+#define AFC_COMP_REF_SEL_0p4V_MASK          (0x2 << AFC_COMP_REF_SEL_SHIFT)
+#define AFC_HCOMP_REF_SEL_MASK              (0x1f << AFC_HCOMP_REF_SEL_SHIFT)
+#define AFC_HCOMP_REF_SEL_1p2V_MASK         (0x8 << AFC_HCOMP_REF_SEL_SHIFT)
+
+
 /* S2MU106 MUIC MUIC_CTRL1 Register (0x6D) */
 #define MUIC_CTRL1_TX_DPDM_SHORT_SHIFT		7
 #define MUIC_CTRL1_TX_DP_RDN_SHIFT			6
@@ -923,7 +934,7 @@ struct s2mu106_muic_data {
 
 	struct mutex muic_mutex;
 	struct mutex switch_mutex;
-	#if defined(CONFIG_HV_MUIC_S2MU106_AFC)
+#if defined(CONFIG_HV_MUIC_S2MU106_AFC)
 	struct mutex afc_mutex;
 #endif
 

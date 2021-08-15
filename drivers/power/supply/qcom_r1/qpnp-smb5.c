@@ -37,6 +37,7 @@
 #endif
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
 #include "../../../battery_qc/include/sec_battery_qc.h"
+#include "../../../battery_qc/include/sec_battery_ttf.h"
 #include "step-chg-jeita.h"
 #endif
 #if defined(CONFIG_AFC)
@@ -1801,6 +1802,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_SKIP_MODE_STATUS,
 	POWER_SUPPLY_PROP_RECHARGE_VBAT,
 	POWER_SUPPLY_PROP_SS_FACTORY_MODE,
+	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 #endif
 };
 
@@ -1814,6 +1816,7 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 	int rc = 0;
 #if defined(CONFIG_BATTERY_SAMSUNG_USING_QC)
+	struct sec_battery_info *battery = get_sec_battery();
 	enum power_supply_ext_property ext_psp = (enum power_supply_ext_property)psp;
 	int health = 0;
 	u8 data;
@@ -1904,7 +1907,14 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SS_FACTORY_MODE:
 		/* To disable deamon ss_factory_mode */
 		val->intval = 0; 
-		break; 
+		break;
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
+		if (battery != NULL)
+			val->intval = ttf_display(battery);
+		else
+			val->intval = 0;
+		pr_info("%s: Time to full (%d)\n", __func__, val->intval);
+		break;
 #endif
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 	case POWER_SUPPLY_PROP_CURRENT_AVG:

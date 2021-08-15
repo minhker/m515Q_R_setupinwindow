@@ -86,6 +86,8 @@ ifeq ($(CONFIG_SEC_A90Q_PROJECT), y)
 obj-$(CONFIG_ARCH_QCOM)        += qcom_r1/
 else ifeq ($(CONFIG_SEC_A70S_PROJECT), y)
 obj-$(CONFIG_ARCH_QCOM)        += qcom_r1/
+else ifeq ($(CONFIG_SEC_A70Q_PROJECT), y)
+obj-$(CONFIG_ARCH_QCOM)        += qcom_r1/
 else
 obj-$(CONFIG_ARCH_QCOM)        += qcom/
 endif

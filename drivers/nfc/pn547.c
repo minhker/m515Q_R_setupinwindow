@@ -1898,11 +1898,13 @@ static struct i2c_driver pn547_driver = {
 static int __init pn547_dev_init(void)
 {
 	NFC_LOG_INFO("Loading pn547 driver\n");
+#ifdef CONFIG_BATTERY_SAMSUNG
 	if (lpcharge) {
 		NFC_LOG_ERR("LPM, Do not load nfc driver\n");
 		return 0;
-	} else
-		return i2c_add_driver(&pn547_driver);
+	}
+#endif
+	return i2c_add_driver(&pn547_driver);
 }
 
 module_init(pn547_dev_init);

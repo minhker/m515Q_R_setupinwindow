@@ -348,6 +348,7 @@ void usbpd_set_ops(struct device *dev, usbpd_phy_ops_type *ops)
 	pd_data->phy_ops.poll_status = ops->poll_status;
 	pd_data->phy_ops.driver_reset = ops->driver_reset;
 	pd_data->phy_ops.set_otg_control = ops->set_otg_control;
+	pd_data->phy_ops.set_otg_voltage = ops->set_otg_voltage;
 	pd_data->phy_ops.get_vbus_short_check = ops->get_vbus_short_check;
 	pd_data->phy_ops.pd_vbus_short_check = ops->pd_vbus_short_check;
 	pd_data->phy_ops.set_cc_control = ops->set_cc_control;
@@ -635,6 +636,7 @@ void usbpd_reinit(struct device *dev)
 	usbpd_init_manager_val(pd_data);
 	reinit_completion(&pd_data->msg_arrived);
 	pd_data->wait_for_msg_arrived = 0;
+	pd_data->thermal_unsupport = 0;
 	complete(&pd_data->msg_arrived);
 }
 
@@ -666,6 +668,9 @@ int usbpd_init(struct device *dev, void *phy_driver_data)
 	pd_noti.sink_status.selected_pdo_num = 0;
 #endif
 #endif
+	pd_data->thermal_swap = 0;
+	pd_data->thermal_unsupport = 0;
+	
 	usbpd_init_counters(pd_data);
 	usbpd_init_protocol(pd_data);
 	usbpd_init_policy(pd_data);

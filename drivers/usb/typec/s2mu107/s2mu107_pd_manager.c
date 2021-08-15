@@ -27,11 +27,20 @@
 #include <linux/completion.h>
 
 #include <linux/usb/typec/s2mu107/s2mu107_pd.h>
+#include <linux/usb/typec/s2mu107/s2mu106_typec.h>
 #include <linux/usb/typec/pdic_sysfs.h>
 
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#else
 #include <linux/muic/muic.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #endif /* CONFIG_MUIC_NOTIFIER */
 #include "../../../battery_v2/include/sec_charging_common.h"
 #include "../../../battery_v2/include/sec_battery.h"
@@ -56,12 +65,14 @@ extern struct pdic_notifier_struct pd_noti;
 *FUNCTION DEFINITION
 */
 void usbpd_manager_select_pdo_cancel(struct device *dev);
+int usbpd_manager_command_to_policy(struct device *dev, usbpd_manager_command_type command);
 
 #ifdef CONFIG_BATTERY_SAMSUNG
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 extern void select_pdo(int num);
 void usbpd_manager_select_pdo(int num);
 extern void (*fp_select_pdo)(int num);
+extern void (*fp_change_thermal_source_cap)(int enable, int max_cur);
 #if defined(CONFIG_PDIC_PD30)
 extern int (*fp_sec_pd_select_pps)(int num, int ppsVol, int ppsCur);
 extern int (*fp_sec_pd_get_apdo_max_power)(unsigned int *pdo_pos, unsigned int *taMaxVol, unsigned int *taMaxCur, unsigned int *taMaxPwr);
@@ -70,6 +81,64 @@ extern int (*fp_pps_enable)(int num, int ppsVol, int ppsCur, int enable);
 int (*fp_get_pps_voltage)(void);
 #endif
 #endif
+
+void usbpd_manager_change_thermal_source_cap(int enable, int max_cur)
+{
+	struct usbpd_data *pd_data = pd_noti.pusbpd;
+
+	msg_header_type *msg_header = &pd_data->source_msg_header;
+	data_obj_type *data_obj_thermal = &pd_data->source_data_obj_thermal;
+	int max_current = 0;
+
+	/*
+	 * enable = 1 : set thermal state
+	 *   max_cur : first source_cap max current(mA unit)
+	 * enable = 0 : clear thermal state
+	 *   max_cur : if enable=0, invalid (shall set to 0)
+	 */
+
+	if (pd_data->thermal_state == enable) {
+		pr_info("%s, ignored prev(%d), enable(%d)\n", __func__,
+				pd_data->thermal_state, enable);
+		return;
+	}
+	
+	if (pd_data->thermal_unsupport) {
+		pr_info("%s, Sink device cannot support 9V, force to set en(1), 500mA\n", __func__);
+		enable = 1;
+		max_cur = 500;
+	}
+	
+	pr_info("%s, en(%d), max_cur(%d)\n", __func__, enable, max_cur);
+	if (enable) {
+		pd_data->thermal_state = true;
+		msg_header->num_data_objs = 1;
+
+		max_current = (max_cur / 10) & 0x3ff;
+		data_obj_thermal->power_data_obj.max_current = max_current;
+	} else {
+		pd_data->thermal_state = false;
+#if defined(CONFIG_CCIC_9V_OTG_SUPPORT)
+		msg_header->num_data_objs = 2;
+#else
+		msg_header->num_data_objs = 1;
+#endif
+	}
+
+	usbpd_manager_command_to_policy(pd_data->dev, MANAGER_REQ_SRCCAP_CHANGE);
+}
+
+void usbpd_manager_9V_pdo_select(struct usbpd_data *pd_data, int en)
+{
+	union power_supply_propval value;
+
+	if (en)
+		pd_data->select_status = 0;
+	else
+		pd_data->select_status = 1;
+	value.intval = en;
+	psy_do_property("otg", set, POWER_SUPPLY_EXT_PROP_SELECT_PDO_9V, value);
+}
 
 void usbpd_manager_select_pdo(int num)
 {
@@ -431,10 +500,14 @@ void pdo_ctrl_by_flash(bool mode)
 
 void usbpd_manager_select_pdo_handler(struct work_struct *work)
 {
+#if defined(CONFIG_CCIC_9V_OTG_SUPPORT)
+	struct usbpd_data *pd_data = pd_noti.pusbpd;
+	if (pd_noti.sink_status.selected_pdo_num == 2)
+		usbpd_manager_9V_pdo_select(pd_data, 0);
+#endif
 	pr_info("%s: call select pdo handler\n", __func__);
 
 	usbpd_manager_inform_event(pd_noti.pusbpd, MANAGER_NEW_POWER_SRC);
-
 }
 
 void usbpd_manager_select_pdo_cancel(struct device *dev)
@@ -488,7 +561,12 @@ static void init_source_cap_data(struct usbpd_manager_data *_data)
 /*	struct usbpd_data *pd_data = manager_to_usbpd(_data);
 	int val;						*/
 	msg_header_type *msg_header = &_data->pd_data->source_msg_header;
-	data_obj_type *data_obj = &_data->pd_data->source_data_obj;
+	data_obj_type *data_obj = _data->pd_data->source_data_obj;
+	data_obj_type *data_obj_thermal = &_data->pd_data->source_data_obj_thermal;
+#if defined(CONFIG_CCIC_9V_OTG_SUPPORT)
+	struct usbpd_data *pd_data = pd_noti.pusbpd;
+	pd_data->thermal_state = 1;
+#endif
 
 	msg_header->msg_type = USBPD_Source_Capabilities;
 /*	pd_data->phy_ops.get_power_role(pd_data, &val);		*/
@@ -496,14 +574,33 @@ static void init_source_cap_data(struct usbpd_manager_data *_data)
 	msg_header->spec_revision = _data->pd_data->specification_revision;
 	msg_header->port_power_role = USBPD_SOURCE;
 	msg_header->num_data_objs = 1;
+#if defined(CONFIG_CCIC_9V_OTG_SUPPORT)
+	data_obj[0].power_data_obj.max_current = 490 / 10;
+#else
+	data_obj[0].power_data_obj.max_current = 500 / 10;
+#endif
+	data_obj[0].power_data_obj.voltage = 5000 / 50;
+	data_obj[0].power_data_obj.supply = POWER_TYPE_FIXED;
+	data_obj[0].power_data_obj.data_role_swap = 1;
+	data_obj[0].power_data_obj.dual_role_power = 1;
+	data_obj[0].power_data_obj.usb_suspend_support = 1;
+	data_obj[0].power_data_obj.usb_comm_capable = 1;
 
-	data_obj->power_data_obj.max_current = 500 / 10;
-	data_obj->power_data_obj.voltage = 5000 / 50;
-	data_obj->power_data_obj.supply = POWER_TYPE_FIXED;
-	data_obj->power_data_obj.data_role_swap = 1;
-	data_obj->power_data_obj.dual_role_power = 1;
-	data_obj->power_data_obj.usb_suspend_support = 1;
-	data_obj->power_data_obj.usb_comm_capable = 1;
+	data_obj[1].power_data_obj.max_current = 800 / 10;
+	data_obj[1].power_data_obj.voltage = 9000 / 50;
+	data_obj[1].power_data_obj.supply = POWER_TYPE_FIXED;
+	data_obj[1].power_data_obj.data_role_swap = 1;
+	data_obj[1].power_data_obj.dual_role_power = 1;
+	data_obj[1].power_data_obj.usb_suspend_support = 1;
+	data_obj[1].power_data_obj.usb_comm_capable = 1;
+
+	data_obj_thermal->power_data_obj.max_current = 490 / 10;
+	data_obj_thermal->power_data_obj.voltage = 5000 / 50;
+	data_obj_thermal->power_data_obj.supply = POWER_TYPE_FIXED;
+	data_obj_thermal->power_data_obj.data_role_swap = 1;
+	data_obj_thermal->power_data_obj.dual_role_power = 1;
+	data_obj_thermal->power_data_obj.usb_suspend_support = 1;
+	data_obj_thermal->power_data_obj.usb_comm_capable = 1;
 
 }
 
@@ -928,6 +1025,7 @@ void usbpd_manager_acc_detach(struct device *dev)
 {
 	struct usbpd_data *pd_data = dev_get_drvdata(dev);
 	struct usbpd_manager_data *manager = &pd_data->manager;
+	struct s2mu106_usbpd_data *pdic_data = pd_data->phy_driver_data;
 
 	pr_info("%s\n", __func__);
 	if ( manager->acc_type != CCIC_DOCK_DETACHED ) {
@@ -936,6 +1034,8 @@ void usbpd_manager_acc_detach(struct device *dev)
 			schedule_delayed_work(&manager->acc_detach_handler, msecs_to_jiffies(1000));
 		else
 			schedule_delayed_work(&manager->acc_detach_handler, msecs_to_jiffies(0));
+		s2mu106_ccic_event_work(pdic_data, CCIC_NOTIFY_DEV_ALL,
+			CCIC_NOTIFY_ID_DEVICE_INFO, 0/*Vendor_ID*/, 0/*Product_ID*/, 0/*Device_Version*/);
 	}
 }
 
@@ -1204,6 +1304,9 @@ int usbpd_manager_check_accessory(struct usbpd_manager_data *manager)
 				pr_info("%s : default device connected.\n", __func__);
 				break;
 			}
+		} else {
+			pr_info("%s : unknown device connected.\n", __func__);
+			acc_type = CCIC_DOCK_NEW;
 		}
 		manager->acc_type = acc_type;
 	} else
@@ -1221,6 +1324,7 @@ int usbpd_manager_get_identity(struct usbpd_data *pd_data)
 {
 	struct policy_data *policy = &pd_data->policy;
 	struct usbpd_manager_data *manager = &pd_data->manager;
+	struct s2mu106_usbpd_data *pdic_data = pd_data->phy_driver_data;
 
 	manager->Vendor_ID = policy->rx_data_obj[1].id_header_vdo.USB_Vendor_ID;
 	manager->Product_ID = policy->rx_data_obj[3].product_vdo.USB_Product_ID;
@@ -1231,6 +1335,9 @@ int usbpd_manager_get_identity(struct usbpd_data *pd_data)
 
 	if (usbpd_manager_check_accessory(manager))
 		pr_info("%s, Samsung Accessory Connected.\n", __func__);
+
+	s2mu106_ccic_event_work(pdic_data, CCIC_NOTIFY_DEV_ALL,
+			CCIC_NOTIFY_ID_DEVICE_INFO, manager->Vendor_ID, manager->Product_ID, manager->Device_Version);
 
 	return 0;
 }
@@ -1267,6 +1374,9 @@ int usbpd_manager_get_modes(struct usbpd_data *pd_data)
 	/* check SVID and return 0 only if DP support */
 	return (usbpd_manager_get_svids(pd_data) == 0) ? 0 : -1;
 #endif
+	if (manager->Standard_Vendor_ID == SAMSUNG_VENDOR_ID) {
+		return 0;
+	}
     return -1;
 }
 
@@ -1348,6 +1458,8 @@ int usbpd_manager_evaluate_capability(struct usbpd_data *pd_data)
 	pdic_sink_status->has_apdo = false;
 #endif
 
+	pd_noti.sink_status.selected_pdo_num = 1;
+	
 	for (i = 0; i < policy->rx_msg_header.num_data_objs; i++) {
 		pd_obj = &policy->rx_data_obj[i];
 		power_type = pd_obj->power_data_obj_supply_type.supply_type;
@@ -1392,8 +1504,7 @@ int usbpd_manager_evaluate_capability(struct usbpd_data *pd_data)
 			pd_current = pd_obj->power_data_obj_pps.max_current;
 #ifdef CONFIG_BATTERY_SAMSUNG
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-			if (pd_volt * USBPD_PPS_VOLT_UNIT <= MAX_CHARGING_VOLT)
-				available_pdo_num = i + 1;
+			available_pdo_num = i + 1;
 			pdic_sink_status->power_list[i + 1].max_voltage = pd_volt * USBPD_PPS_VOLT_UNIT;
 			pdic_sink_status->power_list[i + 1].max_current = pd_current * USBPD_PPS_CURRENT_UNIT;
 #if defined(CONFIG_PDIC_PD30)
@@ -1437,9 +1548,22 @@ int usbpd_manager_evaluate_capability(struct usbpd_data *pd_data)
 int usbpd_manager_match_request(struct usbpd_data *pd_data)
 {
 	/* TODO: Evaluation of sink request */
-	unsigned supply_type
-	= pd_data->source_request_obj.power_data_obj_supply_type.supply_type;
-	unsigned src_max_current,  mismatch, max_min, op, pos;
+	unsigned pos = pd_data->source_request_obj.request_data_obj_pos_type.object_position;
+	unsigned tx_num = pd_data->source_msg_header.num_data_objs;
+	unsigned supply_type;
+	unsigned src_max_current,  mismatch, max_min, op;
+	data_obj_type p_source_data_obj;
+
+	pr_info("REQ pos:%d, Tx num:%d\n", pos, tx_num);
+	if (pos > tx_num || pos == 0)
+		return -1;
+
+	if (pd_data->thermal_state) {
+		p_source_data_obj = pd_data->source_data_obj_thermal;
+	} else {
+		p_source_data_obj = pd_data->source_data_obj[pos-1];
+	}
+	supply_type = p_source_data_obj.power_data_obj_supply_type.supply_type;
 
 	if (supply_type == POWER_TYPE_FIXED)
 		pr_info("REQUEST: FIXED\n");
@@ -1456,20 +1580,19 @@ int usbpd_manager_match_request(struct usbpd_data *pd_data)
 	}
 
     /* Tx Source PDO */
-    src_max_current = pd_data->source_data_obj.power_data_obj.max_current;
+    src_max_current = p_source_data_obj.power_data_obj.max_current;
 
     /* Rx Request RDO */
 	mismatch = pd_data->source_request_obj.request_data_object.capability_mismatch;
 	max_min = pd_data->source_request_obj.request_data_object.min_current;
 	op = pd_data->source_request_obj.request_data_object.op_current;
-	pos = pd_data->source_request_obj.request_data_object.object_position;
 
     /*src_max_current is already *10 value ex) src_max_current 500mA */
-	pr_info("Tx SourceCap Current : %dmA\n", src_max_current*10);
+	pr_info("Tx %dth SourceCap Current : %dmA\n", pos, src_max_current*10);
 	pr_info("Rx Request Current : %dmA\n", max_min*10);
 
     /* Compare Pdo and Rdo */
-    if ((src_max_current >= op) && (pos == 1))
+    if (src_max_current >= op)
 		return 0;
     else
 		return -1;
@@ -1579,6 +1702,9 @@ int usbpd_init_manager(struct usbpd_data *pd_data)
 #ifdef CONFIG_BATTERY_SAMSUNG
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	fp_select_pdo = usbpd_manager_select_pdo;
+#if defined(CONFIG_CCIC_9V_OTG_SUPPORT)
+	fp_change_thermal_source_cap = usbpd_manager_change_thermal_source_cap;
+#endif
 #if defined(CONFIG_PDIC_PD30)
 	fp_sec_pd_select_pps = usbpd_manager_select_pps;
 	fp_sec_pd_get_apdo_max_power = usbpd_manager_get_apdo_max_power;

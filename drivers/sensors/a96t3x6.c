@@ -34,17 +34,30 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
+#endif /* CONFIG_USE_MUIC_LEGO */
 #endif
 #if defined(CONFIG_CCIC_NOTIFIER)
+#if defined(CONFIG_USE_PDIC_LEGO)
+#include <linux/usb/typec/common/pdic_notifier.h>
+#else
 #include <linux/usb/typec/pdic_notifier.h>
+#endif /* CONFIG_USE_PDIC_LEGO */
 #endif
 #if defined(CONFIG_VBUS_NOTIFIER)
 #include <linux/vbus_notifier.h> 
 #endif 
 #if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+#if defined(CONFIG_USE_PDIC_LEGO)
+#include <linux/usb/typec/manager/usb_typec_manager_notifier.h>
+#else
 #include <linux/usb/typec/usb_typec_manager_notifier.h>
+#endif /* CONFIG_USE_PDIC_LEGO */
 #endif
 
 

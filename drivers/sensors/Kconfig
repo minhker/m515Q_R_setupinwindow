@@ -27,6 +27,16 @@ config SENSORS_SX9360
 	  This option enables grip sensors using
 	  SemTech sx9360 device driver.
 	  Say N here if you do not use sx9360.
+	  
+config SENSORS_SX9364
+	depends on I2C
+	tristate "SX9364 driver"
+	default n
+	help
+	  Say Y here if you use sx9364.
+	  This option enables grip sensors using
+	  SemTech sx9364 device driver.
+	  Say N here if you do not use sx9364.
 
 config SUPPORT_CAMERA_FREEFALL
 	depends on I2C
@@ -89,9 +99,21 @@ config SENSORS_A96T3X6_SUB
 	  This option enables grip sensors using
 	  Above A96T3X6 device driver for grip.
 	  Say N here if you do not use A96T3X6 for grip.
-
-config SENSORS_A96T3X6_CRC_CHECK
-	bool "crc check by fw ver"
+	  
+config SENSORS_ISG5320A
+	depends on I2C
+	tristate "ISG5320A grip"
 	default n
 	help
-	  To use crc check by fw not checking checksum, active this feature
+	  If you say yes here if you use ISG5320A for grip.
+	  This option enables grip sensors using
+	  IMAGIS ISG5320A device driver for grip.
+
+config SENSORS_ISG5320A_SUB
+	depends on I2C
+	tristate "ISG5320A grip sub"
+	default n
+	help
+	  If you say yes here if you use ISG5320A_SUB for grip sub.
+	  This option enables grip sensors using
+	  IMAGIS ISG5320A_SUB device driver for grip sub.

@@ -495,6 +495,7 @@ int get_val(struct range_data *range, int threshold, int *val)
 	for (i = 0; i < MAX_VFLOAT_ENTRIES; i++) {
 		if (!range[i].high_threshold && !range[i].low_threshold) {
 			/* First invalid table entry; exit loop */
+			*val = range[i-1].value;
 			break;
 		}
 

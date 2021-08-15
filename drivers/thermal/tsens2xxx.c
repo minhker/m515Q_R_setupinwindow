@@ -17,8 +17,8 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/vmalloc.h>
-#include "tsens.h"
 #include <soc/qcom/scm.h>
+#include "tsens.h"
 #include "thermal_core.h"
 
 #define TSENS_DRIVER_NAME			"msm-tsens"
@@ -68,7 +68,7 @@
 #define TSENS_TM_TRDY_FIRST_ROUND_COMPLETE	BIT(3)
 #define TSENS_TM_TRDY_FIRST_ROUND_COMPLETE_SHIFT	3
 #define TSENS_INIT_ID	0x5
-#define TSENS_RECOVERY_LOOP_COUNT	5
+#define TSENS_RECOVERY_LOOP_COUNT 5
 
 static void msm_tsens_convert_temp(int last_temp, int *temp)
 {
@@ -146,6 +146,7 @@ static int tsens2xxx_get_temp(struct tsens_sensor *sensor, int *temp)
 	unsigned int code, ret, tsens_ret;
 	void __iomem *sensor_addr, *trdy;
 	int rc = 0, last_temp = 0, last_temp2 = 0, last_temp3 = 0, count = 0;
+	static atomic_t in_tsens_reinit;
 
 	if (!sensor)
 		return -EINVAL;
@@ -155,10 +156,17 @@ static int tsens2xxx_get_temp(struct tsens_sensor *sensor, int *temp)
 	trdy = TSENS_TM_TRDY(tmdev->tsens_tm_addr);
 
 	code = readl_relaxed_no_log(trdy);
+
 	if (!((code & TSENS_TM_TRDY_FIRST_ROUND_COMPLETE) >>
-		TSENS_TM_TRDY_FIRST_ROUND_COMPLETE_SHIFT)) {
+		    TSENS_TM_TRDY_FIRST_ROUND_COMPLETE_SHIFT)) {
+		if (atomic_read(&in_tsens_reinit)) {
+			pr_err("%s: tsens re-init is in progress\n", __func__);
+			return -EAGAIN;
+		}
+
 		pr_err("%s: tsens device first round not complete0x%x\n",
 			__func__, code);
+
 		/* Wait for 2.5 ms for tsens controller to recover */
 		do {
 			udelay(500);
@@ -179,9 +187,18 @@ static int tsens2xxx_get_temp(struct tsens_sensor *sensor, int *temp)
 			struct scm_desc desc = { 0 };
 			int scm_cnt = 0, reg_write_cnt = 0;
 
+			if (atomic_read(&in_tsens_reinit)) {
+				pr_err("%s: tsens re-init is in progress\n",
+					__func__);
+				return -EAGAIN;
+			}
+
+			atomic_set(&in_tsens_reinit, 1);
+
 			if (tmdev->ops->dbg)
 				tmdev->ops->dbg(tmdev, 0,
 					TSENS_DBG_LOG_BUS_ID_DATA, NULL);
+
 			while (1) {
 				/*
 				 * Invoke scm call only if SW register write is
@@ -189,9 +206,9 @@ static int tsens2xxx_get_temp(struct tsens_sensor *sensor, int *temp)
 				 * 2 ms and then retry.
 				 */
 				if (reg_write_cnt >= 100) {
-					msleep(50);
+					msleep(100);
 					pr_err(
-					"%s: Tsens write is failed. cnt:%d \n",
+					"%s: Tsens write is failed. cnt:%d\n",
 						__func__, reg_write_cnt);
 					BUG();
 				}
@@ -212,18 +229,18 @@ static int tsens2xxx_get_temp(struct tsens_sensor *sensor, int *temp)
 				TSENS_DBG(tmdev, "%s",
 					   "Calling TZ to re-init TSENS\n");
 				ret = scm_call2(SCM_SIP_FNID(SCM_SVC_TSENS,
- 							TSENS_INIT_ID), &desc);
+							TSENS_INIT_ID), &desc);
 				TSENS_DBG(tmdev, "%s",
 						"return from scm call\n");
 				if (ret) {
-					msleep(50);
+					msleep(100);
 					pr_err("%s: scm call failed %d\n",
 						__func__, ret);
 					BUG();
 				}
 				tsens_ret = desc.ret[0];
 				if (tsens_ret) {
-					msleep(50);
+					msleep(100);
 					pr_err("%s: scm call failed, ret:%d\n",
 						__func__, tsens_ret);
 					BUG();
@@ -246,23 +263,26 @@ static int tsens2xxx_get_temp(struct tsens_sensor *sensor, int *temp)
 					break;
 
 				if (scm_cnt >= 100) {
-					msleep(50);
+					msleep(100);
 					pr_err(
 					"%s: Tsens is not up after %d scm\n",
 						__func__, scm_cnt);
 					BUG();
-}
+				}
 				udelay(2000);
 				TSENS_DBG(tmdev, "%s cnt:%d\n",
 					"Re-try TSENS scm call", scm_cnt);
-			};
+			}
+			tmdev->tsens_reinit_cnt++;
+			atomic_set(&in_tsens_reinit, 0);
 
 			/* Notify thermal fwk */
 			list_for_each_entry(tmdev_itr,
 						&tsens_device_list, list) {
-			queue_work(tmdev_itr->tsens_reinit_work,
+				queue_work(tmdev_itr->tsens_reinit_work,
 					&tmdev_itr->therm_fwk_notify);
 			}
+
 		} else {
 			pr_err("%s: tsens controller got reset\n", __func__);
 

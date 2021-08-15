@@ -483,7 +483,7 @@ static void sec_abc_work_func(struct work_struct *work)
 			strcat(uevent_str[1], "_w");
 			kobject_uevent_env(&sec_abc->kobj, KOBJ_CHANGE, uevent_str);
 #endif
-		} else if (!strncasecmp(event_type, "gpu_page_fault", 4)) { /* gpu page fault */
+		} else if (!strncasecmp(event_type, "gpu_page_fault", 14)) { /* gpu page fault */
 			in.cur_time = (unsigned long)ktime / USEC_PER_SEC;
 			in.cur_cnt = pgpu_page->fail_cnt++;
 
@@ -617,14 +617,15 @@ static int sec_abc_probe(struct platform_device *pdev)
 
 		if (!pdata) {
 			dev_err(&pdev->dev, "Failed to allocate platform data\n");
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto out;
 		}
 
 		pdev->dev.platform_data = pdata;
 		ret = abc_parse_dt(&pdev->dev);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to parse dt data\n");
-			return ret;
+			goto err_parse_dt;
 		}
 
 		pr_info("%s: parse dt done\n", __func__);
@@ -634,13 +635,16 @@ static int sec_abc_probe(struct platform_device *pdev)
 
 	if (!pdata) {
 		dev_err(&pdev->dev, "There are no platform data\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	pinfo = kzalloc(sizeof(*pinfo), GFP_KERNEL);
 
-	if (!pinfo)
-		return -ENOMEM;
+	if (!pinfo) {
+		ret = -ENOMEM;
+		goto err_alloc_pinfo;
+	}
 
 #ifdef CONFIG_DRV_SAMSUNG
 	pinfo->dev = sec_device_create(0, pinfo, "sec_abc");
@@ -650,8 +654,9 @@ static int sec_abc_probe(struct platform_device *pdev)
 	if (IS_ERR(pinfo->dev)) {
 		pr_err("%s Failed to create device(sec_abc)!\n", __func__);
 		ret = -ENODEV;
-		goto out;
+		goto err_create_device;
 	}
+	sec_abc = pinfo->dev;
 
 	ret = device_create_file(pinfo->dev, &dev_attr_enabled);
 	if (ret) {
@@ -678,7 +683,6 @@ static int sec_abc_probe(struct platform_device *pdev)
 
 	mutex_init(&pinfo->log_mutex);
 
-	sec_abc = pinfo->dev;
 	pinfo->pdata = pdata;
 
 	platform_set_drvdata(pdev, pinfo);
@@ -695,10 +699,13 @@ err_create_abc_enabled_sysfs:
 #else
 	device_destroy(sec_class, sec_abc->devt);
 #endif
-out:
+err_create_device:
 	kfree(pinfo);
-	kfree(pdata);
-
+err_alloc_pinfo:
+err_parse_dt:
+	devm_kfree(&pdev->dev, pdata);
+	pdev->dev.platform_data = NULL;
+out:
 	return ret;
 }
 

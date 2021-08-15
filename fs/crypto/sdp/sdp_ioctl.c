@@ -22,7 +22,7 @@ int fscrypt_sdp_ioctl_get_sdp_info(struct inode *inode, unsigned long arg)
 	req.sdp_enabled = 1;
 
 	ci = inode->i_crypt_info;
-	if(!ci->ci_sdp_info) {
+	if (!ci->ci_sdp_info) {
 		DEK_LOGE("get_info: can't find sdp info\n");
 	} else {
 		DEK_LOGD("get_info: ci->i_crypt_info->sdp_flags: 0x%08x\n",
@@ -97,8 +97,8 @@ int fscrypt_sdp_ioctl_set_sensitive(struct inode *inode, unsigned long arg)
 				DEK_LOGD("Temporarily allowed to process not vold.");
 			} else {
 #endif
-			DEK_LOGE("Only vold as root process can set sensitive directory\n");
-			return -EPERM;
+				DEK_LOGE("Only vold as root process can set sensitive directory\n");
+				return -EPERM;
 #ifdef CONFIG_SDP_KEY_DUMP
 			}
 #endif
@@ -239,6 +239,29 @@ int fscrypt_sdp_ioctl_remove_chamber_directory(struct inode *inode)
 	return result;
 }
 
+int fscrypt_sdp_ioctl_dump_file_key(struct inode *inode)
+{
+#ifdef CONFIG_SDP_KEY_DUMP
+	int rc = 0;
+
+	DEK_LOGE("%s(ino:%ld)\n", __func__, inode->i_ino);
+	if (inode->i_crypt_info == NULL) {
+		DEK_LOGE("no encryption context to the target..\n");
+		rc = -EOPNOTSUPP;
+	} else {
+
+		rc = fscrypt_sdp_dump_file_key(inode);
+		if (rc) {
+			DEK_LOGE("dump_file_key: operation failed (err:%d)\n", rc);
+			rc = -EFAULT;
+		}
+	}
+	return rc;
+#else
+	return 0;
+#endif
+}
+
 /*
  * -ENOTTY will be returned if this ioctl is not related to SDP
  */
@@ -264,6 +287,8 @@ int fscrypt_sdp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return fscrypt_sdp_ioctl_add_chamber_directory(inode, arg);
 	case FS_IOC_REMOVE_CHAMBER:
 		return fscrypt_sdp_ioctl_remove_chamber_directory(inode);
+	case FS_IOC_DUMP_FILE_KEY:
+		return fscrypt_sdp_ioctl_dump_file_key(inode);
 	default:
 		return -ENOTTY;
 	}

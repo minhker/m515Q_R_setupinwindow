@@ -20,9 +20,14 @@
 #include <linux/usb/typec/pdic_notifier.h>
 #endif
 #if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USE_MUIC_LEGO)
+#include <linux/muic/common/muic.h>
+#include <linux/muic/common/muic_notifier.h>
+#else
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
-#endif
+#endif /* CONFIG_USE_MUIC_LEGO */
+#endif /* CONFIG_MUIC_NOTIFIER */
 #if defined(CONFIG_VBUS_NOTIFIER)
 #include <linux/vbus_notifier.h>
 #endif
